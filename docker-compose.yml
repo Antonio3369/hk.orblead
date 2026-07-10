@@ -1,0 +1,26 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    ports:
+      - "3080:3080"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      PORT: 3080
+      DATABASE_PATH: /app/data/app.db
+      SITE_SLUG: ${SITE_SLUG:-leadsales}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-}
+      IMPORT_API_KEY: ${IMPORT_API_KEY:-}
+      QQ_IMAP_USER: ${QQ_IMAP_USER:-}
+      QQ_IMAP_PASS: ${QQ_IMAP_PASS:-}
+      QQ_SMTP_USER: ${QQ_SMTP_USER:-}
+      QQ_SMTP_PASS: ${QQ_SMTP_PASS:-}
+      EMAIL_IMPORT_NOTIFY_TO: ${EMAIL_IMPORT_NOTIFY_TO:-}
+      DASHBOARD_IMPORT_URL: ${DASHBOARD_IMPORT_URL:-http://127.0.0.1:3080}
+    volumes:
+      - app-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  app-data:

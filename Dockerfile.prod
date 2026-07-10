@@ -1,0 +1,14 @@
+# 生产部署：使用 Mac 上已 build 的 dist / dist-server，不在服务器编译
+FROM node:22-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3080
+ENV DATABASE_PATH=/app/data/app.db
+COPY package.json package-lock.json* ./
+RUN npm install --omit=dev
+COPY dist ./dist
+COPY dist-server ./dist-server
+COPY public ./public
+RUN mkdir -p /app/data
+EXPOSE 3080
+CMD ["sh", "-c", "node dist-server/seed.js 2>/dev/null || true; node dist-server/index.js"]

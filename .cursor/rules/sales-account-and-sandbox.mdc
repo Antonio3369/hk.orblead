@@ -1,0 +1,42 @@
+---
+description: 销售登录名对齐移卡業務員、沙箱验证与 sam202512 交易额问题（待续开发）
+alwaysApply: true
+---
+
+# 销售账号与沙箱（2026-07 定稿）
+
+## 登录名 vs 显示名
+
+- 移卡机构报表 **`業務員`** 列（如 `sam202512`）导入时匹配 **`users.username`**，不是 display_name。
+- **display_name** 仅工作台展示（如 Sam、Winnie）。
+- 销售应使用与業務員一致的 **username** 登录；旧账号（如 `sam`）应停用。
+- 已定稿 7 人：Winnie202512、sam202512、Char202605、Khloe202606、Alex202604、Ivy202604、JT2026；`66987458` 暂不处理。
+
+## 已开发待一起完善/发版
+
+- 后台 **销售账号与权限** → **「改登入名」**（`PUT /api/users/:id` 支持 `username`；`AdminPage.tsx` 按钮）。
+- 改登入名后自动 `syncMerchantSalesAssignment()`。
+- 用户确认功能可用，**稍后再一起开发/发版**（勿未经讨论直接上生产）。
+
+## sam202512 7 月交易额不一致
+
+- 上游 Excel / 机构报表 7/1：**526,287 HKD（约 52.6 万）**。
+- 看板偏少（如 24.73 万 / 29.4 万）通常是 **商户 sales_user_id 归属错误** 或 **未导入机构报表**，不是再导 `sam202512.xlsx`（会 7606 条全重复跳过）。
+- **修复**：admin **追加导入** `54516685_機构交易數據報表_YYYY-MM-DD.xlsx`（勿指定销售）→ 必要时 **同步商户归属**。
+
+## 本地沙箱
+
+- 启动：`npm run sandbox:open` → http://localhost:3090（`data/sandbox-live.db`）。
+- 账号：admin/admin123，sam202512/sales123。
+- **`sandbox-open.ts` 每次启动故意把一半 7 月商户挂到 Winnie**，故 sam 默认约 **29.4 万**（模拟生产异常）。
+- 沙箱内追加导入 org 7/1 报表后应恢复 **约 52.6 万**；**重启沙箱会重置为 29.4 万**（预期行为）。
+- 自动化场景：`npm run sandbox`（A/B/C）。
+
+## 移卡邮件自动导入（2026-07 规划）
+
+- 发件人：`baseweb_report@yeahka.com`，约每天 10:15 到 QQ 邮箱。
+- 附件：`54516685_機构交易數據報表_YYYY-MM-DD.xlsx`。
+- 实现：`POST /api/import/auto`（`X-Import-Key` + `IMPORT_API_KEY`）；`server/emailImport/run.ts`。
+- 环境变量见 `.env.example`（`QQ_IMAP_*`、`EMAIL_IMPORT_NOTIFY_TO` 等）。
+- 服务器 cron：`bash scripts/install-email-import-cron.sh`（每天 10:25 HKT）。
+- 手动试跑：`docker compose exec app node dist-server/emailImport/run.js`

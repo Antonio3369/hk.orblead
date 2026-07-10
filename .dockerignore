@@ -1,0 +1,17 @@
+node_modules
+.git
+.env
+.env.*
+!.env.example
+secrets
+tools
+release
+data
+*.tgz
+.DS_Store
+src
+electron
+*.md
+!README.md
+scripts
+__pycache__

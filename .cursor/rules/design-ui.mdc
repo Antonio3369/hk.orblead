@@ -1,0 +1,78 @@
+---
+description: 立得香港看板 UI 设计规范 — 与 Open Design 协作、改 React 界面时遵循
+globs:
+  - src/**/*.tsx
+  - src/**/*.css
+alwaysApply: false
+---
+
+# 立得香港看板 · UI 设计规范
+
+## 品牌与语言
+
+- 产品名：**立得香港商戶交易看板**（配置见 `src/config/branding.ts`）
+- 界面文案用 **繁体中文（香港）**，金额单位 **HKD**
+- 语气：专业、简洁，面向销售/管理层，避免营销腔
+
+## 技术栈（勿引入新依赖）
+
+- React 18 + Vite + TypeScript
+- **纯 CSS**（`src/styles/index.css`），无 Tailwind / CSS-in-JS
+- 路径别名 `@/` → `src/`
+- 改 UI 时优先复用现有 class，新样式追加到 `index.css` 对应区块
+
+## 设计令牌（`:root` CSS 变量）
+
+改颜色/圆角/阴影时必须用变量，禁止硬编码 hex：
+
+| 用途 | 变量 |
+|------|------|
+| 背景 | `--bg`, `--bg-subtle`, `--surface` |
+| 文字 | `--text`, `--text-secondary`, `--text-muted` |
+| 主色 | `--primary`, `--primary-hover`, `--primary-soft` |
+| 状态 | `--success`, `--danger`, `--warn` 及对应 `-soft` |
+| 圆角 | `--radius-sm` ~ `--radius-xl` |
+| 阴影 | `--shadow-sm`, `--shadow`, `--shadow-lg` |
+| 布局 | `--content-max: 1520px`, `--content-gutter: 20px` |
+
+## 组件约定
+
+- **页面骨架**：`AppShell`（标题 + 返回 + actions + main）
+- **按钮/筛选**：`NeoButton`（`size`: md/sm/xs，`active` 表示选中）
+- **标签/徽章**：`MerchantStatusTag`、`.home-entry-badge`、`.muted-badge`
+- **面板**：`.panel`、`.panel-title`、`.panel-desc`
+- **加载态**：`PageLoader`（勿自造 spinner）
+- **页脚**：`SiteLegalFooter`（登录/内页已有备案信息）
+
+新建页面应遵循 Dashboard / MerchantsPage 的布局节奏，不要另起一套视觉语言。
+
+## 响应式
+
+- Mobile-first：业务卡包（`HomeEntryPack`）在窄屏 2×2，宽屏横排
+- 表格页（MerchantsPage、TigerTeamPage）窄屏允许横向滚动，勿截断关键列
+- 改完必须在 **375px 与 1280px** 两种宽度目测合理
+
+## 本地预览
+
+```bash
+npm run dev          # http://localhost:3090
+npm run sandbox:open # 带沙箱数据的完整环境
+```
+
+改 UI 后应说明如何在浏览器验证；大改需提 desktop + mobile。
+
+## Open Design 协作
+
+- Open Design 项目 **立得香港看板** 对应本仓库（`import-folder` 导入）
+- MCP 已配置（`~/.cursor/mcp.json` → `open-design`），Open Design 运行时可用：
+  - `get_active_context` — 当前 OD 打开的文件/项目
+  - `get_file` / `list_files` — 读取 OD 内设计稿
+  - `create_artifact` — 写回 HTML 原型（仅 OD 生成物，非 React 源码）
+- **React 源码以 Cursor 为准**；OD 里的 HTML 原型作参考，迁移时需改写成 TSX + 现有 CSS
+- 在 OD 打开本目录：`od project open-in b51306f7-d60c-430d-937a-16fb49bcf4bd --editor cursor`
+
+## 禁止事项
+
+- 不引入 Inter 以外的第三字体、不加大面积渐变 hero、不用「AI 风」紫粉默认 aesthetic
+- 不删改 `branding.ts` / 备案信息除非用户明确要求
+- 不把 insight 业务逻辑写进样式层；状态色用已有 `--success` / `--danger` / `--warn`

@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-server
+data/*.db
+data/*.db-*
+release/*.tgz
+.DS_Store
+*.log
+*.tgz
+.env
+.env.local
+.env.*.local
+secrets/
+tools/alipay/.env
+tools/alipay/.venv/
+tools/alipay/output/

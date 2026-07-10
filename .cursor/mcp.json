@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "open-design": {
+      "command": "/Users/antonio/.local/node-v22.15.0-darwin-arm64/bin/node",
+      "args": [
+        "/Applications/Open Design.app/Contents/Resources/app/prebundled/daemon/daemon-cli.mjs",
+        "mcp"
+      ],
+      "env": {
+        "OD_DATA_DIR": "/Users/antonio/Library/Application Support/Open Design/namespaces/release-stable/data",
+        "OD_SIDECAR_IPC_PATH": "/tmp/open-design/ipc/release-stable/daemon.sock"
+      }
+    }
+  }
+}

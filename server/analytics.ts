@@ -1,5 +1,6 @@
 import { db } from "./db.js";
-import { getLeaderSalesUserIds } from "./leaderTeam.js";
+import { getLeaderSalesUserIds, listLeaderTeamSales } from "./leaderTeam.js";
+import { listTigerTeamSales } from "./tigerTeam.js";
 import {
   getMerchantInsightStatus,
   parseUnreadAlertPeriods,
@@ -462,15 +463,29 @@ export function getMerchantRankMonthLabel(): string {
   return `${d.getMonth() + 1}月`;
 }
 
+function salesUserIdsForRole(role: string, userId: number): number[] | null {
+  if (role === "admin") return null;
+  if (role === "leader") return [userId, ...getLeaderSalesUserIds(userId)];
+  return [userId];
+}
+
+/** 工作台个人视图：Leader 按销售身份统计本人数据 */
+export function personalDashboardRole(role: string): string {
+  return role === "leader" ? "sales" : role;
+}
+
 function merchantListAccessClause(role: string, userId: number): { where: string; params: number[] } {
-  if (role === "admin") return { where: "", params: [] };
-  if (role === "leader") {
-    const teamIds = getLeaderSalesUserIds(userId);
-    const ids = [userId, ...teamIds];
-    const placeholders = ids.map(() => "?").join(", ");
-    return { where: `WHERE m.sales_user_id IN (${placeholders})`, params: ids };
-  }
-  return { where: "WHERE m.sales_user_id = ?", params: [userId] };
+  const ids = salesUserIdsForRole(role, userId);
+  if (!ids) return { where: "", params: [] };
+  const placeholders = ids.map(() => "?").join(", ");
+  return { where: `WHERE m.sales_user_id IN (${placeholders})`, params: ids };
+}
+
+function transactionAccessClause(role: string, userId: number): { clause: string; params: number[] } {
+  const ids = salesUserIdsForRole(role, userId);
+  if (!ids) return { clause: "", params: [] };
+  const placeholders = ids.map(() => "?").join(", ");
+  return { clause: `AND m.sales_user_id IN (${placeholders})`, params: ids };
 }
 
 function limitPercent(used: number, limit: number | null): number | null {
@@ -586,14 +601,12 @@ export interface SalesHomeInsightSnapshot {
   unreadAlertMerchantCount: number;
 }
 
-/** 销售/主管工作台：本月摘要与商户洞察计数 */
-export function getSalesHomeInsightSnapshot(
-  userId: number,
-  role: string
-): SalesHomeInsightSnapshot | null {
-  if (role !== "sales" && role !== "leader") return null;
-
-  const merchants = listMerchantsForUser(userId, role);
+/** 工作台 Hero / 摘要：Leader 僅統計本人歸屬商戶；銷售同本人；Admin 不走此接口 */
+export function getDashboardHomeInsight(userId: number, role: string): SalesHomeInsightSnapshot {
+  const merchants =
+    role === "leader"
+      ? listMerchantsForUser(userId, "sales")
+      : listMerchantsForUser(userId, role);
   const mtdAmount = Math.round(merchants.reduce((sum, m) => sum + m.mtdAmount, 0) * 100) / 100;
   const lastMonthAmount = merchants.reduce((sum, m) => sum + m.lastMonthAmount, 0);
   const mtd = getMtdThroughYesterdayRange();
@@ -622,6 +635,115 @@ export function getSalesHomeInsightSnapshot(
   };
 }
 
+/** @deprecated 使用 getDashboardHomeInsight */
+export function getSalesHomeInsightSnapshot(
+  userId: number,
+  role: string
+): SalesHomeInsightSnapshot | null {
+  if (role !== "sales" && role !== "leader") return null;
+  return getDashboardHomeInsight(userId, role);
+}
+
+export interface DashboardDayTrendPoint {
+  date: string;
+  label: string;
+  amount: number;
+  txnCount: number;
+}
+
+export interface DashboardRolling30Comparison {
+  recentLabel: string;
+  recentRangeLabel: string;
+  recentAmount: number;
+  recentTxnCount: number;
+  recentMerchantCount: number;
+  previousLabel: string;
+  previousRangeLabel: string;
+  previousAmount: number;
+  previousTxnCount: number;
+  previousMerchantCount: number;
+  amountChangePercent: number | null;
+  dailyAvgChangePercent: number | null;
+}
+
+function formatRangeLabel(startYmd: string, endYmd: string): string {
+  const fmt = (ymd: string) => {
+    const [, m, d] = ymd.split("-");
+    return `${Number(m)}/${Number(d)}`;
+  };
+  return `${fmt(startYmd)}–${fmt(endYmd)}`;
+}
+
+/** 工作台：近 N 日每日交易走势（截至昨日） */
+export function getDashboardDailyTrend(
+  userId: number,
+  role: string,
+  dayCount = 30
+): DashboardDayTrendPoint[] {
+  const today = startOfDay(new Date());
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  const points: DashboardDayTrendPoint[] = [];
+  for (let i = dayCount - 1; i >= 0; i--) {
+    const d = new Date(yesterday);
+    d.setDate(yesterday.getDate() - i);
+    const ymd = formatLocalYmd(d);
+    const row = queryDateRange(userId, role, ymd, ymd);
+    points.push({
+      date: ymd,
+      label: `${d.getMonth() + 1}/${d.getDate()}`,
+      amount: row.totalAmount,
+      txnCount: row.txnCount,
+    });
+  }
+  return points;
+}
+
+/** 工作台：近 30 日 vs 前 30 日環比 */
+export function getDashboardRolling30Comparison(
+  userId: number,
+  role: string
+): DashboardRolling30Comparison {
+  const today = startOfDay(new Date());
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  const recentEnd = formatLocalYmd(yesterday);
+  const recentStartDate = new Date(yesterday);
+  recentStartDate.setDate(yesterday.getDate() - 29);
+  const recentStart = formatLocalYmd(recentStartDate);
+
+  const previousEndDate = new Date(recentStartDate);
+  previousEndDate.setDate(recentStartDate.getDate() - 1);
+  const previousEnd = formatLocalYmd(previousEndDate);
+  const previousStartDate = new Date(previousEndDate);
+  previousStartDate.setDate(previousEndDate.getDate() - 29);
+  const previousStart = formatLocalYmd(previousStartDate);
+
+  const recent = queryDateRange(userId, role, recentStart, recentEnd);
+  const previous = queryDateRange(userId, role, previousStart, previousEnd);
+  const windowDays = 30;
+
+  const recentDailyAvg = recent.totalAmount / windowDays;
+  const previousDailyAvg = previous.totalAmount / windowDays;
+
+  return {
+    recentLabel: "近30日",
+    recentRangeLabel: formatRangeLabel(recentStart, recentEnd),
+    recentAmount: recent.totalAmount,
+    recentTxnCount: recent.txnCount,
+    recentMerchantCount: recent.merchantCount,
+    previousLabel: "前30日",
+    previousRangeLabel: formatRangeLabel(previousStart, previousEnd),
+    previousAmount: previous.totalAmount,
+    previousTxnCount: previous.txnCount,
+    previousMerchantCount: previous.merchantCount,
+    amountChangePercent: calcChangePercent(recent.totalAmount, previous.totalAmount),
+    dailyAvgChangePercent: calcChangePercent(recentDailyAvg, previousDailyAvg),
+  };
+}
+
 export interface MonthStat {
   year: number;
   month: number;
@@ -634,9 +756,12 @@ export interface MonthStat {
   weeks: WeekStat[];
 }
 
-function monthWhereClause(role: string): string {
-  const base = `FROM transactions t JOIN merchants m ON m.id = t.merchant_id WHERE strftime('%Y-%m', t.txn_time) = ?`;
-  return role === "admin" ? base : `${base} AND m.sales_user_id = ?`;
+function monthWhereClause(role: string, userId: number): { fromWhere: string; params: number[] } {
+  const access = transactionAccessClause(role, userId);
+  return {
+    fromWhere: `FROM transactions t JOIN merchants m ON m.id = t.merchant_id WHERE strftime('%Y-%m', t.txn_time) = ? ${access.clause}`,
+    params: access.params,
+  };
 }
 
 function queryDateRange(
@@ -645,29 +770,63 @@ function queryDateRange(
   startInclusive: string,
   endInclusive: string
 ): { totalAmount: number; txnCount: number; merchantCount: number } {
-  const sql =
-    role === "admin"
-      ? `SELECT COALESCE(SUM(t.amount), 0) as totalAmount, COUNT(t.id) as txnCount,
+  const access = transactionAccessClause(role, userId);
+  const sql = `SELECT COALESCE(SUM(t.amount), 0) as totalAmount, COUNT(t.id) as txnCount,
          COUNT(DISTINCT m.id) as merchantCount
          FROM transactions t JOIN merchants m ON m.id = t.merchant_id
-         WHERE substr(t.txn_time, 1, 10) >= ? AND substr(t.txn_time, 1, 10) <= ?`
-      : `SELECT COALESCE(SUM(t.amount), 0) as totalAmount, COUNT(t.id) as txnCount,
-         COUNT(DISTINCT m.id) as merchantCount
-         FROM transactions t JOIN merchants m ON m.id = t.merchant_id
-         WHERE substr(t.txn_time, 1, 10) >= ? AND substr(t.txn_time, 1, 10) <= ?
-         AND m.sales_user_id = ?`;
+         WHERE substr(t.txn_time, 1, 10) >= ? AND substr(t.txn_time, 1, 10) <= ? ${access.clause}`;
 
-  const row = (
-    role === "admin"
-      ? db.prepare(sql).get(startInclusive, endInclusive)
-      : db.prepare(sql).get(startInclusive, endInclusive, userId)
-  ) as { totalAmount: number; txnCount: number; merchantCount: number };
+  const row = db
+    .prepare(sql)
+    .get(startInclusive, endInclusive, ...access.params) as {
+    totalAmount: number;
+    txnCount: number;
+    merchantCount: number;
+  };
 
   return {
     totalAmount: Math.round(row.totalAmount * 100) / 100,
     txnCount: row.txnCount,
     merchantCount: row.merchantCount,
   };
+}
+
+/** 按日汇总，避免日交叉图逐日查询（原 60 次 → 2 次） */
+function queryDailyTotalsMap(
+  userId: number,
+  role: string,
+  startInclusive: string,
+  endInclusive: string
+): Map<string, { totalAmount: number; txnCount: number }> {
+  const access = transactionAccessClause(role, userId);
+  const sql = `SELECT substr(t.txn_time, 1, 10) as day,
+         COALESCE(SUM(t.amount), 0) as totalAmount,
+         COUNT(t.id) as txnCount
+         FROM transactions t JOIN merchants m ON m.id = t.merchant_id
+         WHERE substr(t.txn_time, 1, 10) >= ? AND substr(t.txn_time, 1, 10) <= ? ${access.clause}
+         GROUP BY day`;
+  const rows = db.prepare(sql).all(startInclusive, endInclusive, ...access.params) as Array<{
+    day: string;
+    totalAmount: number;
+    txnCount: number;
+  }>;
+  const map = new Map<string, { totalAmount: number; txnCount: number }>();
+  for (const row of rows) {
+    map.set(row.day, {
+      totalAmount: Math.round(row.totalAmount * 100) / 100,
+      txnCount: row.txnCount,
+    });
+  }
+  return map;
+}
+
+export function countMerchantsForUser(userId: number, role: string): number {
+  if (role === "admin") {
+    return (db.prepare("SELECT COUNT(*) as c FROM merchants").get() as { c: number }).c;
+  }
+  const access = merchantListAccessClause(role, userId);
+  const sql = `SELECT COUNT(*) as c FROM merchants m ${access.where}`;
+  return (db.prepare(sql).get(...access.params) as { c: number }).c;
 }
 
 function queryCalendarMonth(
@@ -688,13 +847,12 @@ function queryCalendarMonth(
   }
 
   const ym = `${year}-${String(month).padStart(2, "0")}`;
+  const monthAccess = monthWhereClause(role, userId);
   const sql = `SELECT COALESCE(SUM(t.amount), 0) as totalAmount, COUNT(t.id) as txnCount,
-    COUNT(DISTINCT m.id) as merchantCount ${monthWhereClause(role)}`;
-  const row = (
-    role === "admin"
-      ? db.prepare(sql).get(ym)
-      : db.prepare(sql).get(ym, userId)
-  ) as { totalAmount: number; txnCount: number; merchantCount: number };
+    COUNT(DISTINCT m.id) as merchantCount ${monthAccess.fromWhere}`;
+  const row = db
+    .prepare(sql)
+    .get(ym, ...monthAccess.params) as { totalAmount: number; txnCount: number; merchantCount: number };
 
   return {
     totalAmount: Math.round(row.totalAmount * 100) / 100,
@@ -751,21 +909,14 @@ export function getMonthWeekBreakdown(
         if (effectiveEnd > todayStr) effectiveEnd = todayStr;
       }
 
-      const sql =
-        role === "admin"
-          ? `SELECT COALESCE(SUM(t.amount), 0) as totalAmount, COUNT(t.id) as txnCount
+      const access = transactionAccessClause(role, userId);
+      const sql = `SELECT COALESCE(SUM(t.amount), 0) as totalAmount, COUNT(t.id) as txnCount
            FROM transactions t JOIN merchants m ON m.id = t.merchant_id
-           WHERE substr(t.txn_time, 1, 10) >= ? AND substr(t.txn_time, 1, 10) < ?`
-          : `SELECT COALESCE(SUM(t.amount), 0) as totalAmount, COUNT(t.id) as txnCount
-           FROM transactions t JOIN merchants m ON m.id = t.merchant_id
-           WHERE substr(t.txn_time, 1, 10) >= ? AND substr(t.txn_time, 1, 10) < ?
-           AND m.sales_user_id = ?`;
+           WHERE substr(t.txn_time, 1, 10) >= ? AND substr(t.txn_time, 1, 10) < ? ${access.clause}`;
 
-      const row = (
-        role === "admin"
-          ? db.prepare(sql).get(start, effectiveEnd)
-          : db.prepare(sql).get(start, effectiveEnd, userId)
-      ) as { totalAmount: number; txnCount: number };
+      const row = db
+        .prepare(sql)
+        .get(start, effectiveEnd, ...access.params) as { totalAmount: number; txnCount: number };
 
       return {
         label,
@@ -807,15 +958,17 @@ function monthChartLabel(year: number, month: number, currentYear: number): stri
 export function getMonthlyStats(
   userId: number,
   role: string,
-  months: { year: number; month: number }[]
+  months: { year: number; month: number }[],
+  options?: { includeWeeks?: boolean }
 ): MonthStat[] {
+  const includeWeeks = options?.includeWeeks !== false;
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
 
   return months.map(({ year, month }) => {
     const { totalAmount, txnCount, merchantCount } = queryCalendarMonth(userId, role, year, month);
-    const weeks = getMonthWeekBreakdown(userId, role, year, month);
+    const weeks = includeWeeks ? getMonthWeekBreakdown(userId, role, year, month) : [];
     const isCurrent = year === currentYear && month === currentMonth;
     const label = monthDisplayLabel(year, month, isCurrent, currentYear);
     const chartLabel = monthChartLabel(year, month, currentYear);
@@ -824,7 +977,375 @@ export function getMonthlyStats(
   });
 }
 
+/** 工作台折线图等：无需按周拆分，减少 SQL */
+const DASHBOARD_MONTHLY_OPTS = { includeWeeks: false } as const;
+
 /** 工作台：最近三个月（含当月） */
 export function getDashboardMonthlyStats(userId: number, role: string): MonthStat[] {
   return getMonthlyStats(userId, role, getRecentCalendarMonths(3));
+}
+
+function calendarMonthOffset(monthsBeforeCurrent: number): { year: number; month: number } {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - monthsBeforeCurrent);
+  return { year: d.getFullYear(), month: d.getMonth() + 1 };
+}
+
+function daysInCalendarMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+function sharePercent(part: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.round((part / total) * 1000) / 10;
+}
+
+export interface AdminMonthCompareSide {
+  label: string;
+  chartLabel: string;
+  year: number;
+  month: number;
+  totalAmount: number;
+  txnCount: number;
+  merchantCount: number;
+  days: number;
+}
+
+export interface AdminMonthCompare {
+  lastMonth: AdminMonthCompareSide;
+  previousMonth: AdminMonthCompareSide;
+  amountChangePercent: number | null;
+  dailyAvgChangePercent: number | null;
+}
+
+export interface AdminSalesRankRow {
+  rank: number;
+  id: number;
+  displayName: string;
+  lastMonthAmount: number;
+  sharePercent: number;
+  activeMerchantCount: number;
+  assignedMerchantCount: number;
+}
+
+export interface AdminMerchantInsightBucket {
+  key: "rising" | "declining" | "newSilent" | "flat";
+  label: string;
+  count: number;
+  percent: number;
+}
+
+export interface AdminMerchantRankRow {
+  rank: number;
+  id: number;
+  name: string;
+  salesName: string | null;
+  lastMonthAmount: number;
+  sharePercent: number;
+}
+
+export interface AdminDailyMonthCrossPoint {
+  day: number;
+  label: string;
+  currentAmount: number | null;
+  currentTxnCount: number | null;
+  lastAmount: number;
+  lastTxnCount: number;
+}
+
+export interface AdminDashboardCharts {
+  monthlyTrend: MonthStat[];
+  monthCompare: AdminMonthCompare;
+  salesRanking: {
+    rankMonth: string;
+    orgLastMonthTotal: number;
+    sales: AdminSalesRankRow[];
+  };
+  merchantInsight: {
+    rankMonth: string;
+    mtdLabel: string;
+    totalAssigned: number;
+    buckets: AdminMerchantInsightBucket[];
+  };
+  merchantBoxOffice: {
+    rankMonth: string;
+    orgLastMonthTotal: number;
+    merchants: AdminMerchantRankRow[];
+  };
+  dailyMonthCross: {
+    currentMonthLabel: string;
+    lastMonthLabel: string;
+    points: AdminDailyMonthCrossPoint[];
+  };
+}
+
+export function getAdminMonthCompare(userId: number, role: string): AdminMonthCompare {
+  const previousRef = calendarMonthOffset(2);
+  const lastRef = calendarMonthOffset(1);
+  const stats = getMonthlyStats(userId, role, [previousRef, lastRef], DASHBOARD_MONTHLY_OPTS);
+  const [previousMonthStat, lastMonthStat] = stats;
+
+  const previousDays = daysInCalendarMonth(previousRef.year, previousRef.month);
+  const lastDays = daysInCalendarMonth(lastRef.year, lastRef.month);
+
+  const amountChangePercent = calcChangePercent(
+    lastMonthStat.totalAmount,
+    previousMonthStat.totalAmount
+  );
+  const dailyAvgChangePercent = calcChangePercent(
+    lastMonthStat.totalAmount / lastDays,
+    previousMonthStat.totalAmount / previousDays
+  );
+
+  const toSide = (
+    stat: MonthStat,
+    ref: { year: number; month: number },
+    days: number
+  ): AdminMonthCompareSide => ({
+    label: stat.label,
+    chartLabel: stat.chartLabel,
+    year: ref.year,
+    month: ref.month,
+    totalAmount: stat.totalAmount,
+    txnCount: stat.txnCount,
+    merchantCount: stat.merchantCount,
+    days,
+  });
+
+  return {
+    lastMonth: toSide(lastMonthStat, lastRef, lastDays),
+    previousMonth: toSide(previousMonthStat, previousRef, previousDays),
+    amountChangePercent,
+    dailyAvgChangePercent,
+  };
+}
+
+export function getAdminSalesRanking(orgLastMonthTotal: number): AdminSalesRankRow[] {
+  return listTigerTeamSales()
+    .slice()
+    .sort((a, b) => b.lastMonthAmount - a.lastMonthAmount || a.displayName.localeCompare(b.displayName, "zh-HK"))
+    .map((row, index) => ({
+      rank: index + 1,
+      id: row.id,
+      displayName: row.displayName,
+      lastMonthAmount: row.lastMonthAmount,
+      sharePercent: sharePercent(row.lastMonthAmount, orgLastMonthTotal),
+      activeMerchantCount: row.activeMerchantCount,
+      assignedMerchantCount: row.assignedMerchantCount,
+    }));
+}
+
+export function getLeaderTeamSalesRanking(
+  leaderId: number,
+  teamLastMonthTotal: number
+): AdminSalesRankRow[] {
+  return listLeaderTeamSales(leaderId)
+    .slice()
+    .sort((a, b) => b.lastMonthAmount - a.lastMonthAmount || a.displayName.localeCompare(b.displayName, "zh-HK"))
+    .map((row, index) => ({
+      rank: index + 1,
+      id: row.id,
+      displayName: row.displayName,
+      lastMonthAmount: row.lastMonthAmount,
+      sharePercent: sharePercent(row.lastMonthAmount, teamLastMonthTotal),
+      activeMerchantCount: row.activeMerchantCount,
+      assignedMerchantCount: row.assignedMerchantCount,
+    }));
+}
+
+const INSIGHT_BUCKET_META: Array<{
+  key: AdminMerchantInsightBucket["key"];
+  label: string;
+}> = [
+  { key: "rising", label: "上漲" },
+  { key: "declining", label: "下跌中" },
+  { key: "newSilent", label: "新沉默" },
+  { key: "flat", label: "平穩" },
+];
+
+function merchantInsightFromList(merchants: MerchantSummary[]): AdminDashboardCharts["merchantInsight"] {
+  const totalAssigned = merchants.length;
+  const counts = new Map<AdminMerchantInsightBucket["key"], number>(
+    INSIGHT_BUCKET_META.map((b) => [b.key, 0])
+  );
+
+  for (const m of merchants) {
+    if (m.status === "inactive") continue;
+    if (counts.has(m.status as AdminMerchantInsightBucket["key"])) {
+      counts.set(
+        m.status as AdminMerchantInsightBucket["key"],
+        (counts.get(m.status as AdminMerchantInsightBucket["key"]) ?? 0) + 1
+      );
+    }
+  }
+
+  return {
+    rankMonth: getMerchantRankMonthLabel(),
+    mtdLabel: getMtdThroughYesterdayLabel(),
+    totalAssigned,
+    buckets: INSIGHT_BUCKET_META.map((meta) => {
+      const count = counts.get(meta.key) ?? 0;
+      return {
+        key: meta.key,
+        label: meta.label,
+        count,
+        percent: sharePercent(count, totalAssigned),
+      };
+    }),
+  };
+}
+
+function merchantBoxOfficeFromList(
+  merchants: MerchantSummary[],
+  limit = 20
+): AdminDashboardCharts["merchantBoxOffice"] {
+  const orgLastMonthTotal = merchants.reduce((sum, m) => sum + m.lastMonthAmount, 0);
+  const top = merchants
+    .slice()
+    .sort((a, b) => b.lastMonthAmount - a.lastMonthAmount || a.name.localeCompare(b.name, "zh-HK"))
+    .slice(0, limit)
+    .map((m, index) => ({
+      rank: index + 1,
+      id: m.id,
+      name: m.name,
+      salesName: m.salesName,
+      lastMonthAmount: m.lastMonthAmount,
+      sharePercent: sharePercent(m.lastMonthAmount, orgLastMonthTotal),
+    }));
+
+  return {
+    rankMonth: getMerchantRankMonthLabel(),
+    orgLastMonthTotal: Math.round(orgLastMonthTotal * 100) / 100,
+    merchants: top,
+  };
+}
+
+export function getAdminMerchantInsightDistribution(
+  userId: number,
+  role: string
+): AdminDashboardCharts["merchantInsight"] {
+  return merchantInsightFromList(listMerchantsForUser(userId, role));
+}
+
+export function getAdminMerchantBoxOffice(
+  userId: number,
+  role: string,
+  limit = 20
+): AdminDashboardCharts["merchantBoxOffice"] {
+  return merchantBoxOfficeFromList(listMerchantsForUser(userId, role), limit);
+}
+
+export function getAdminDailyMonthCross(
+  userId: number,
+  role: string
+): AdminDashboardCharts["dailyMonthCross"] {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const lastRef = calendarMonthOffset(1);
+  const mtd = getMtdThroughYesterdayRange();
+  const currentThroughDay = mtd.days;
+  const currentMonthDays = daysInCalendarMonth(currentYear, currentMonth);
+  const lastMonthDays = daysInCalendarMonth(lastRef.year, lastRef.month);
+
+  const currentStart = `${currentYear}-${String(currentMonth).padStart(2, "0")}-01`;
+  const currentEnd =
+    currentThroughDay > 0
+      ? `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(Math.min(currentThroughDay, currentMonthDays)).padStart(2, "0")}`
+      : currentStart;
+  const lastStart = `${lastRef.year}-${String(lastRef.month).padStart(2, "0")}-01`;
+  const lastEnd = `${lastRef.year}-${String(lastRef.month).padStart(2, "0")}-${String(lastMonthDays).padStart(2, "0")}`;
+
+  const currentByDay =
+    currentThroughDay > 0 ? queryDailyTotalsMap(userId, role, currentStart, currentEnd) : new Map();
+  const lastByDay = queryDailyTotalsMap(userId, role, lastStart, lastEnd);
+
+  const points: AdminDailyMonthCrossPoint[] = [];
+  for (let day = 1; day <= 30; day++) {
+    let currentAmount: number | null = null;
+    let currentTxnCount: number | null = null;
+    if (day <= currentThroughDay && day <= currentMonthDays) {
+      const ymd = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const row = currentByDay.get(ymd);
+      currentAmount = row?.totalAmount ?? 0;
+      currentTxnCount = row?.txnCount ?? 0;
+    }
+
+    let lastAmount = 0;
+    let lastTxnCount = 0;
+    if (day <= lastMonthDays) {
+      const ymd = `${lastRef.year}-${String(lastRef.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const row = lastByDay.get(ymd);
+      lastAmount = row?.totalAmount ?? 0;
+      lastTxnCount = row?.txnCount ?? 0;
+    }
+
+    points.push({
+      day,
+      label: `${day}日`,
+      currentAmount,
+      currentTxnCount,
+      lastAmount,
+      lastTxnCount,
+    });
+  }
+
+  return {
+    currentMonthLabel: `${currentMonth}月`,
+    lastMonthLabel: `${lastRef.month}月`,
+    points,
+  };
+}
+
+export function getAdminDashboardCharts(userId: number, role: string): AdminDashboardCharts | null {
+  if (role !== "admin") return null;
+
+  const merchants = listMerchantsForUser(userId, role);
+  const merchantBoxOffice = merchantBoxOfficeFromList(merchants, 20);
+
+  return {
+    monthlyTrend: getMonthlyStats(userId, role, getRecentCalendarMonths(6), DASHBOARD_MONTHLY_OPTS),
+    monthCompare: getAdminMonthCompare(userId, role),
+    salesRanking: {
+      rankMonth: merchantBoxOffice.rankMonth,
+      orgLastMonthTotal: merchantBoxOffice.orgLastMonthTotal,
+      sales: getAdminSalesRanking(merchantBoxOffice.orgLastMonthTotal),
+    },
+    merchantInsight: merchantInsightFromList(merchants),
+    merchantBoxOffice,
+    dailyMonthCross: getAdminDailyMonthCross(userId, role),
+  };
+}
+
+export function getPersonalDashboardCharts(
+  userId: number
+): Pick<AdminDashboardCharts, "monthlyTrend" | "monthCompare" | "merchantInsight" | "dailyMonthCross"> {
+  const role = "sales";
+  const merchants = listMerchantsForUser(userId, role);
+  return {
+    monthlyTrend: getMonthlyStats(userId, role, getRecentCalendarMonths(3), DASHBOARD_MONTHLY_OPTS),
+    monthCompare: getAdminMonthCompare(userId, role),
+    merchantInsight: merchantInsightFromList(merchants),
+    dailyMonthCross: getAdminDailyMonthCross(userId, role),
+  };
+}
+
+export function getLeaderDashboardCharts(userId: number): AdminDashboardCharts {
+  const role = "leader";
+  const merchants = listMerchantsForUser(userId, role);
+  const merchantBoxOffice = merchantBoxOfficeFromList(merchants, 20);
+
+  return {
+    monthlyTrend: getMonthlyStats(userId, role, getRecentCalendarMonths(3), DASHBOARD_MONTHLY_OPTS),
+    monthCompare: getAdminMonthCompare(userId, role),
+    salesRanking: {
+      rankMonth: merchantBoxOffice.rankMonth,
+      orgLastMonthTotal: merchantBoxOffice.orgLastMonthTotal,
+      sales: getLeaderTeamSalesRanking(userId, merchantBoxOffice.orgLastMonthTotal),
+    },
+    merchantInsight: merchantInsightFromList(merchants),
+    merchantBoxOffice,
+    dailyMonthCross: getAdminDailyMonthCross(userId, role),
+  };
 }

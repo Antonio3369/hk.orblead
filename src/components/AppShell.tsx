@@ -9,6 +9,8 @@ interface AppShellProps {
   actions?: ReactNode;
   onBack?: () => void;
   backLabel?: string;
+  /** 嵌入側欄佈局時使用較輕量的頁面頭部 */
+  embedded?: boolean;
 }
 
 export function AppShell({
@@ -18,10 +20,11 @@ export function AppShell({
   actions,
   onBack,
   backLabel = "返回",
+  embedded = true,
 }: AppShellProps) {
   return (
-    <div className="app-shell">
-      <header className="shell-header">
+    <div className={`app-shell ${embedded ? "app-shell--embedded" : ""}`}>
+      <header className={`shell-header ${embedded ? "shell-header--embedded" : ""}`}>
         <div className="shell-header-inner">
           <div className="shell-brand">
             {onBack ? (
@@ -48,7 +51,7 @@ export function AppShell({
         </div>
       </header>
       <main className="shell-main">{children}</main>
-      <SiteLegalFooter className="site-legal-footer--shell" />
+      {!embedded ? <SiteLegalFooter className="site-legal-footer--shell" /> : null}
     </div>
   );
 }

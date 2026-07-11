@@ -10,11 +10,7 @@ const ROLE_LABEL: Record<string, string> = {
   sales: "銷售",
 };
 
-interface UserCenterPageProps {
-  onBack: () => void;
-}
-
-export function UserCenterPage({ onBack }: UserCenterPageProps) {
+export function UserCenterPage() {
   const { user, logout } = useAuth();
   const [email, setEmail] = useState("");
   const [profileLoading, setProfileLoading] = useState(true);
@@ -71,7 +67,7 @@ export function UserCenterPage({ onBack }: UserCenterPageProps) {
   };
 
   return (
-    <AppShell title="用戶中心" subtitle="個人資料與帳號安全" onBack={onBack}>
+    <AppShell title="用戶中心" subtitle="個人資料與帳號安全">
       <section className="panel">
         <h2 className="panel-title">個人信息</h2>
         {profileLoading ? (

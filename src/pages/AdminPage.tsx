@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { api, stashLoginNotice } from "@/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { uploadImportFile, uploadLimitFile, type ImportResult } from "@/api/upload";
+import { DeveloperViewPanel } from "@/components/DeveloperViewPanel";
 import { AppShell } from "@/components/AppShell";
 import { BRAND } from "@/config/branding";
 
@@ -26,11 +27,11 @@ interface AppUser {
 }
 
 interface AdminPageProps {
-  onBack: () => void;
+  navResetKey?: number;
 }
 
 type UploadPhase = "idle" | "uploading" | "processing" | "done" | "error";
-type AdminSection = "hub" | "users" | "password" | "import" | "rules";
+type AdminSection = "hub" | "users" | "password" | "import" | "rules" | "developer";
 
 const PERIOD_LABEL = { week: "週", month: "月" } as const;
 
@@ -64,6 +65,12 @@ const ADMIN_ENTRIES: Array<{
     desc: "更新後臺管理員登入密碼",
     icon: "🔐",
   },
+  {
+    id: "developer",
+    title: "開發者視圖",
+    desc: "主題配色 · 淺色/深色 · 僅管理員",
+    icon: "🎨",
+  },
 ];
 
 const SECTION_TITLES: Record<Exclude<AdminSection, "hub">, string> = {
@@ -71,9 +78,18 @@ const SECTION_TITLES: Record<Exclude<AdminSection, "hub">, string> = {
   password: "修改管理員密碼",
   import: "導入交易數據",
   rules: "預警閥值",
+  developer: "開發者視圖",
 };
 
-export function AdminPage({ onBack }: AdminPageProps) {
+function AdminSectionBack({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" className="admin-section-back" onClick={onClick}>
+      ← 後臺首頁
+    </button>
+  );
+}
+
+export function AdminPage({ navResetKey = 0 }: AdminPageProps) {
   const { logout } = useAuth();
   const [section, setSection] = useState<AdminSection>("hub");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -81,6 +97,8 @@ export function AdminPage({ onBack }: AdminPageProps) {
   const [limitUploadKind, setLimitUploadKind] = useState<"card" | "scan">("card");
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [dailyDeclineThreshold, setDailyDeclineThreshold] = useState("10");
+  const [mastercardHighlightWan, setMastercardHighlightWan] = useState("130");
+  const [mastercardAlertWan, setMastercardAlertWan] = useState("160");
   const [users, setUsers] = useState<AppUser[]>([]);
   const [importMode, setImportMode] = useState<"append" | "replace" | "failuresOnly">("replace");
   const [importSalesName, setImportSalesName] = useState("");
@@ -122,9 +140,15 @@ export function AdminPage({ onBack }: AdminPageProps) {
 
   const loadRules = () => {
     api<{ rules: AlertRule[] }>("/alert-rules").then((r) => setRules(r.rules));
-    api<{ dailyDeclineThresholdPercent: number }>("/insight-settings").then((r) =>
-      setDailyDeclineThreshold(String(r.dailyDeclineThresholdPercent))
-    );
+    api<{
+      dailyDeclineThresholdPercent: number;
+      mastercardLifetimeWarnHkd: number;
+      mastercardLifetimeAlertHkd: number;
+    }>("/insight-settings").then((r) => {
+      setDailyDeclineThreshold(String(r.dailyDeclineThresholdPercent));
+      setMastercardHighlightWan(String(r.mastercardLifetimeWarnHkd / 10_000));
+      setMastercardAlertWan(String(r.mastercardLifetimeAlertHkd / 10_000));
+    });
   };
 
   const loadUsers = () => {
@@ -158,6 +182,10 @@ export function AdminPage({ onBack }: AdminPageProps) {
       loadLimitStats();
     }
   };
+
+  useEffect(() => {
+    setSection("hub");
+  }, [navResetKey]);
 
   const setMsg = (text: string, type: "info" | "success" | "error" = "info") => {
     setMessage(text);
@@ -350,6 +378,44 @@ export function AdminPage({ onBack }: AdminPageProps) {
       });
       loadRules();
       setMsg(`已更新「下跌中」判定閾值為 ${thresholdPercent}%`, "success");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "設定失敗", "error");
+    }
+  };
+
+  const saveMastercardHighlightThreshold = async (e: FormEvent) => {
+    e.preventDefault();
+    const thresholdWan = Number(mastercardHighlightWan);
+    if (!Number.isFinite(thresholdWan) || thresholdWan <= 0) {
+      setMsg("請輸入有效的萬港幣金額", "error");
+      return;
+    }
+    const thresholdHkd = Math.round(thresholdWan * 10_000);
+    try {
+      await api("/insight-settings/mastercard-lifetime-highlight", {
+        method: "PUT",
+        json: { thresholdHkd },
+      });
+      setMsg(`已更新萬事達累計標黃閾值為 ${thresholdWan} 萬港幣`, "success");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "設定失敗", "error");
+    }
+  };
+
+  const saveMastercardAlertThreshold = async (e: FormEvent) => {
+    e.preventDefault();
+    const thresholdWan = Number(mastercardAlertWan);
+    if (!Number.isFinite(thresholdWan) || thresholdWan <= 0) {
+      setMsg("請輸入有效的萬港幣金額", "error");
+      return;
+    }
+    const thresholdHkd = Math.round(thresholdWan * 10_000);
+    try {
+      await api("/insight-settings/mastercard-lifetime-alert", {
+        method: "PUT",
+        json: { thresholdHkd },
+      });
+      setMsg(`已更新萬事達累計標紅閾值為 ${thresholdWan} 萬港幣`, "success");
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "設定失敗", "error");
     }
@@ -612,7 +678,7 @@ export function AdminPage({ onBack }: AdminPageProps) {
 
   if (section === "hub") {
     return (
-      <AppShell title={BRAND.adminHubTitle} subtitle={BRAND.companyName} onBack={onBack}>
+      <AppShell title={BRAND.adminHubTitle} subtitle={BRAND.companyName}>
         <section className="panel">
           <p className="panel-desc panel-desc-tight">選擇要管理的後臺功能模塊</p>
           <div className="admin-hub-grid">
@@ -641,9 +707,8 @@ export function AdminPage({ onBack }: AdminPageProps) {
     <AppShell
       title={SECTION_TITLES[section]}
       subtitle={`${BRAND.adminHubTitle} · ${BRAND.companyName}`}
-      onBack={() => setSection("hub")}
-      backLabel="返回後臺"
     >
+      <AdminSectionBack onClick={() => setSection("hub")} />
       {section === "import" && showCompleteBanner && (
         <div className="import-complete-banner" role="status">
           <span className="import-complete-icon">✓</span>
@@ -1183,10 +1248,52 @@ export function AdminPage({ onBack }: AdminPageProps) {
                 儲存
               </button>
             </form>
+            <form className="rule-card" onSubmit={saveMastercardHighlightThreshold}>
+              <h3>萬事達累計標黃（預警）</h3>
+              <p className="panel-desc panel-desc-tight">
+                「萬事達排名」頁中，商戶歷史 Mastercard 累計交易額達此金額及以上時以黃色預警標示。
+              </p>
+              <label>
+                標黃閾值（萬港幣）
+                <input
+                  type="number"
+                  min={1}
+                  max={9999}
+                  step={1}
+                  value={mastercardHighlightWan}
+                  onChange={(e) => setMastercardHighlightWan(e.target.value)}
+                />
+              </label>
+              <button type="submit" className="btn btn-primary btn-sm">
+                儲存
+              </button>
+            </form>
+            <form className="rule-card" onSubmit={saveMastercardAlertThreshold}>
+              <h3>萬事達累計標紅</h3>
+              <p className="panel-desc panel-desc-tight">
+                累計達此金額及以上時改以紅色標示（須高於標黃閾值）。
+              </p>
+              <label>
+                標紅閾值（萬港幣）
+                <input
+                  type="number"
+                  min={1}
+                  max={9999}
+                  step={1}
+                  value={mastercardAlertWan}
+                  onChange={(e) => setMastercardAlertWan(e.target.value)}
+                />
+              </label>
+              <button type="submit" className="btn btn-primary btn-sm">
+                儲存
+              </button>
+            </form>
           </div>
           {messageBlock}
         </section>
       )}
+
+      {section === "developer" && <DeveloperViewPanel />}
     </AppShell>
   );
 }

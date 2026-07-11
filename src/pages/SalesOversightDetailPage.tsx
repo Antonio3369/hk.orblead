@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Alert, type SalesAccountabilityRow } from "@/api/client";
-import { followUpItemKey } from "@/api/followUp";
+import { scrollMainToTop } from "@/utils/mainScroll";
 import { AlertListSection, countAlertReadState } from "@/components/AlertListSection";
 import { type AlertStatusFilter } from "@/components/AlertReadFilterTabs";
 import { AppShell } from "@/components/AppShell";
 import { useFollowUpLatest } from "@/components/FollowUpPanel";
-import { UserHeaderActions } from "@/components/UserHeaderActions";
 import { useAuth } from "@/context/AuthContext";
 
 const ALERT_PERIOD_LABEL = { week: "週", month: "月" } as const;
@@ -22,8 +21,6 @@ interface SalesOversightDetailPageProps {
   periodFilter: "" | "week" | "month";
   onBack: () => void;
   onOpenMerchant: (merchantId: number) => void;
-  onOpenAdmin?: () => void;
-  onOpenUserCenter?: () => void;
 }
 
 function oversightSalesApiPath(
@@ -50,8 +47,6 @@ export function SalesOversightDetailPage({
   periodFilter,
   onBack,
   onOpenMerchant,
-  onOpenAdmin,
-  onOpenUserCenter,
 }: SalesOversightDetailPageProps) {
   const { user } = useAuth();
   const [stats, setStats] = useState<SalesAccountabilityRow | null>(null);
@@ -77,9 +72,7 @@ export function SalesOversightDetailPage({
 
   useEffect(() => {
     const scrollToTop = () => {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
+      scrollMainToTop();
     };
     scrollToTop();
     const timers = [0, 50, 150].map((ms) => window.setTimeout(scrollToTop, ms));
@@ -117,7 +110,6 @@ export function SalesOversightDetailPage({
       subtitle={`未跟進督辦 · ${periodLabel} · ${unread} 條待處理 / 共 ${total} 條`}
       onBack={onBack}
       backLabel="返回督辦榜"
-      actions={<UserHeaderActions onOpenAdmin={onOpenAdmin} onOpenUserCenter={onOpenUserCenter} />}
     >
       <section className="panel">
         <div className="sales-oversight-detail-head">

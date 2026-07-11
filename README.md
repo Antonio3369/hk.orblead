@@ -33,15 +33,16 @@
 ## 本地开发
 
 ```bash
-cd /Users/Eric/projects/sales-data-agent
+cd /Users/xin/projects/hk.orblead
 npm install
-npm run db:seed    # 初始化账号 + 样例数据
-npm run dev        # 浏览器打开 http://localhost:3080
+npm run sandbox:open   # 或 npm run dev → http://localhost:3080
 ```
 
-- 打开 http://localhost:5173  
-- 管理员 `admin` / `admin123` → **数据管理** 上传文件  
-- 销售 `zhangming` / `sales123` → 仅看张明名下商户  
+- 管理员 `admin` / `admin123` → **後臺管理** 导入数据  
+- 销售 `sam202512` / `sales123` → 仅看本人商户  
+
+文档：**[docs/立得香港看板-AI助手交接指南.md](docs/立得香港看板-AI助手交接指南.md)**（AI / 开发者主交接）  
+发版：**[docs/发版流程.md](docs/发版流程.md)** · 索引：**[docs/README.md](docs/README.md)**
 
 ## 生产部署（外网给全体销售使用）
 
@@ -60,7 +61,7 @@ docker compose up -d --build
 
 访问 `http://服务器IP:3080`。前面加 **Nginx + HTTPS**（Let's Encrypt）即可给销售发域名，例如 `https://sales.yourcompany.com`。
 
-项目结构见 **[docs/项目结构.md](docs/项目结构.md)**。  
+项目结构、开发说明见 **[docs/立得香港看板-AI助手交接指南.md](docs/立得香港看板-AI助手交接指南.md)**。  
 发版步骤见 **[docs/发版流程.md](docs/发版流程.md)**（Mac 打包 → OrcaTerm 解压 → `docker compose up -d --build`）。
 
 ### 方式二：云服务器手动部署
@@ -78,8 +79,7 @@ npm start
 
 ### 销售账号（管理员网页）
 
-登录 **admin** → **数据管理** → **销售账号**：添加用户名/显示名/密码，导入数据后点 **同步商户归属**。  
-显示名须与智付文件名或表内销售一致（如 `JasonLee`）。
+登录 **admin** → **後臺管理**：导入、用户、阈值。销售 **username** 须与移卡 Excel **業務員** 列一致。
 
 ### 外网部署
 

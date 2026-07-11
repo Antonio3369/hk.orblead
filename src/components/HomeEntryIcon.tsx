@@ -1,6 +1,15 @@
 import type { ReactNode } from "react";
 
-export type HomeEntryIconKind = "alerts" | "merchants" | "failures" | "tiger" | "team" | "summary";
+export type HomeEntryIconKind =
+  | "alerts"
+  | "merchants"
+  | "failures"
+  | "tiger"
+  | "team"
+  | "summary"
+  | "mastercard"
+  | "overseasCard"
+  | "developer";
 export type HomeEntryIconTone = "amber" | "blue" | "rose" | "green" | "violet";
 
 const paths: Record<HomeEntryIconKind, ReactNode> = {
@@ -47,6 +56,26 @@ const paths: Record<HomeEntryIconKind, ReactNode> = {
       <path d="M7 16V9" />
       <path d="M12 16V5" />
       <path d="M17 16v-3" />
+    </>
+  ),
+  mastercard: (
+    <>
+      <circle cx="9" cy="12" r="6" />
+      <circle cx="15" cy="12" r="6" />
+    </>
+  ),
+  overseasCard: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M2 12h20" />
+      <path d="M12 3a15 15 0 0 1 0 18" />
+      <path d="M12 3a15 15 0 0 0 0 18" />
+    </>
+  ),
+  developer: (
+    <>
+      <path d="M16 18 22 12 16 6" />
+      <path d="M8 6 2 12l6 6" />
     </>
   ),
 };

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Alert, type AlertOversightSummary, type SalesAccountabilityRow, type TigerTeamSalesRow } from "@/api/client";
-import { followUpItemKey } from "@/api/followUp";
+import { getMainScrollTop, scrollMainTo } from "@/utils/mainScroll";
 import { AlertListSection, countAlertReadState } from "@/components/AlertListSection";
 import { AlertOversightBar } from "@/components/AlertOversightBar";
 import { SalesAccountabilityPanel } from "@/components/SalesAccountabilityPanel";
@@ -8,7 +8,6 @@ import { type AlertStatusFilter } from "@/components/AlertReadFilterTabs";
 import { AppShell } from "@/components/AppShell";
 import { SalesFilterSelect } from "@/components/SalesFilterSelect";
 import { useFollowUpLatest } from "@/components/FollowUpPanel";
-import { UserHeaderActions } from "@/components/UserHeaderActions";
 import { useAuth } from "@/context/AuthContext";
 import type { SalesOversightContext } from "@/pages/SalesOversightDetailPage";
 import type { SalesFilter } from "@/utils/salesFilter";
@@ -16,12 +15,9 @@ import type { SalesFilter } from "@/utils/salesFilter";
 const ALERT_PERIOD_LABEL = { week: "週", month: "月" } as const;
 
 interface AlertsPageProps {
-  onBack: () => void;
   onOpenMerchant: (id: number) => void;
   onOpenSalesOversight?: (ctx: SalesOversightContext) => void;
   initialAdminView?: "list" | "sales";
-  onOpenAdmin?: () => void;
-  onOpenUserCenter?: () => void;
 }
 
 function matchSalesFilter(alert: Alert, filter: SalesFilter, leaderUserId?: number): boolean {
@@ -32,12 +28,9 @@ function matchSalesFilter(alert: Alert, filter: SalesFilter, leaderUserId?: numb
 }
 
 export function AlertsPage({
-  onBack,
   onOpenMerchant,
   onOpenSalesOversight,
   initialAdminView,
-  onOpenAdmin,
-  onOpenUserCenter,
 }: AlertsPageProps) {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -56,7 +49,7 @@ export function AlertsPage({
 
   const load = async (opts?: { silent?: boolean }) => {
     const silent = opts?.silent ?? false;
-    const scrollY = silent ? window.scrollY : null;
+    const scrollY = silent ? getMainScrollTop() : null;
     if (!silent) setLoading(true);
     try {
       const q = periodFilter ? `?period=${periodFilter}` : "";
@@ -65,7 +58,7 @@ export function AlertsPage({
     } finally {
       if (!silent) setLoading(false);
       else if (scrollY != null) {
-        requestAnimationFrame(() => window.scrollTo(0, scrollY));
+        requestAnimationFrame(() => scrollMainTo(scrollY));
       }
     }
   };
@@ -151,9 +144,7 @@ export function AlertsPage({
   return (
     <AppShell
       title="交易預警"
-      subtitle={`${user?.displayName} · ${unread} 條未跟進 / 共 ${total} 條${filterHint}`}
-      onBack={onBack}
-      actions={<UserHeaderActions onOpenAdmin={onOpenAdmin} onOpenUserCenter={onOpenUserCenter} />}
+      subtitle={`${user?.displayName} · ${unread} 條未跟進 / 共 ${total} 條${isLeader ? " · 團隊範圍" : ""}${filterHint}`}
     >
       <section className="panel">
         <div className="panel-head">

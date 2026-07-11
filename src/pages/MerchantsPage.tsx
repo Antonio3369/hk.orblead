@@ -7,16 +7,14 @@ import { AppShell } from "@/components/AppShell";
 import { MerchantSearchInput } from "@/components/MerchantSearchInput";
 import { NeoButton } from "@/components/NeoButton";
 import { SalesFilterSelect } from "@/components/SalesFilterSelect";
-import { UserHeaderActions } from "@/components/UserHeaderActions";
 import { useAuth } from "@/context/AuthContext";
+import { merchantsNavLabel } from "@/config/navigation";
 import type { SalesFilter } from "@/utils/salesFilter";
 
 interface MerchantsPageProps {
-  onBack: () => void;
   onOpenMerchant: (id: number) => void;
-  onOpenAdmin?: () => void;
-  onOpenUserCenter?: () => void;
   initialViewSort?: MerchantListSortKey;
+  initialSalesFilter?: SalesFilter;
 }
 
 type SortKey =
@@ -191,11 +189,9 @@ function SortableTh({
 }
 
 export function MerchantsPage({
-  onBack,
   onOpenMerchant,
-  onOpenAdmin,
-  onOpenUserCenter,
   initialViewSort,
+  initialSalesFilter,
 }: MerchantsPageProps) {
   const { user } = useAuth();
   const [merchants, setMerchants] = useState<MerchantSummary[]>([]);
@@ -219,6 +215,10 @@ export function MerchantsPage({
   useEffect(() => {
     setViewSort(initialViewSort ?? "lastMonthAmount");
   }, [initialViewSort]);
+
+  useEffect(() => {
+    setSalesFilter(initialSalesFilter ?? "all");
+  }, [initialSalesFilter]);
 
   useEffect(() => {
     setLoading(true);
@@ -314,7 +314,7 @@ export function MerchantsPage({
       : "暫無商戶數據，請聯繫管理員導入支付後台導出檔案";
   }, [search, salesFilter, hasInsightView, viewSortHint, isAdmin]);
 
-  const pageTitle = isAdmin ? "全部商戶" : isLeader ? "我的商戶與團隊" : "我的商戶";
+  const pageTitle = isAdmin ? merchantsNavLabel("admin") : merchantsNavLabel(isLeader ? "leader" : "sales");
 
   const mobileSortOptions = useMemo(
     () =>
@@ -357,8 +357,6 @@ export function MerchantsPage({
           ? `共 ${merchants.length} 家 · 顯示 ${displayed.length} 家${filterHint}`
           : undefined
       }
-      onBack={onBack}
-      actions={<UserHeaderActions onOpenAdmin={onOpenAdmin} onOpenUserCenter={onOpenUserCenter} />}
     >
       <section className="panel">
         <div className="merchant-toolbar">

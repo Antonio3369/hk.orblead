@@ -5,7 +5,6 @@ import { PageLoader } from "@/components/PageLoader";
 import { AppShell } from "@/components/AppShell";
 import { SalesFilterSelect } from "@/components/SalesFilterSelect";
 import { FollowUpPanel, useFollowUpLatest } from "@/components/FollowUpPanel";
-import { UserHeaderActions } from "@/components/UserHeaderActions";
 import { useAuth } from "@/context/AuthContext";
 import type { SalesFilter } from "@/utils/salesFilter";
 
@@ -41,17 +40,11 @@ function matchSalesFilter(group: MerchantGroup, filter: SalesFilter, leaderUserI
 }
 
 interface CardFailuresPageProps {
-  onBack: () => void;
   onOpenMerchant: (id: number) => void;
-  onOpenAdmin?: () => void;
-  onOpenUserCenter?: () => void;
 }
 
 export function CardFailuresPage({
-  onBack,
   onOpenMerchant,
-  onOpenAdmin,
-  onOpenUserCenter,
 }: CardFailuresPageProps) {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -145,8 +138,6 @@ export function CardFailuresPage({
     <AppShell
       title={pageTitle}
       subtitle={`${summary.rangeLabel || "近3日"} · ${summary.failureCount} 筆 · ${summary.merchantCount} 家商戶${filterHint}`}
-      onBack={onBack}
-      actions={<UserHeaderActions onOpenAdmin={onOpenAdmin} onOpenUserCenter={onOpenUserCenter} />}
     >
       <section className="panel">
         <p className="panel-desc">

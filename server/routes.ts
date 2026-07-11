@@ -14,6 +14,10 @@ import {
   type UserRole,
 } from "./auth.js";
 import {
+  listMerchantMastercardLifetimeRank,
+} from "./mastercardRank.js";
+import { getOverseasCardOverview } from "./overseasCard.js";
+import {
   getAutoImportAdminId,
   importKeyMiddleware,
   isYikaOrgReportFilename,
@@ -27,7 +31,7 @@ import {
   listSalesForTeamPicker,
   setLeaderTeamMembers,
 } from "./leaderTeam.js";
-import { ALERT_PERIODS, getAdminAlertsForSalesUser, getAlertsForUser, recomputeAllAlerts } from "./alertsEngine.js";
+import { ALERT_PERIODS, countAlertsForUser, getAdminAlertsForSalesUser, getAlertsForUser, recomputeAllAlerts } from "./alertsEngine.js";
 import {
   enrichAdminAlertFields,
   getAlertOversightSummary,
@@ -36,13 +40,18 @@ import {
   getWeeklyAlertDigest,
 } from "./alertOversight.js";
 import {
+  getAdminDashboardCharts,
+  getPersonalDashboardCharts,
+  getLeaderDashboardCharts,
+  personalDashboardRole,
+  countMerchantsForUser,
+  getDashboardHomeInsight,
   getDashboardMonthlyStats,
   getMerchantPeriodSeries,
   getPeriodChange,
   getMerchantRankMonthLabel,
   getMtdThroughYesterdayLabel,
   getCurrentMonthLabel,
-  getSalesHomeInsightSnapshot,
   listMerchantsForUser,
   type PeriodType,
 } from "./analytics.js";
@@ -71,11 +80,10 @@ import { assignSalesToImportBatch, getUnmatchedSalesNames, syncMerchantSalesAssi
 import {
   getAlertsForSalesUser,
   getSalesPeriodComparison,
-  getTigerTeamDashboardSummary,
   getTigerTeamSalesUser,
   listTigerTeamSales,
 } from "./tigerTeam.js";
-import { getDailyDeclineThreshold, setDailyDeclineThreshold } from "./insightRules.js";
+import { getDailyDeclineThreshold, setDailyDeclineThreshold, getMastercardLifetimeWarnHkd, setMastercardLifetimeWarnHkd, getMastercardLifetimeAlertHkd, setMastercardLifetimeAlertHkd } from "./insightRules.js";
 import {
   listMerchantInsightsForSales,
   sortTigerTeamRows,
@@ -300,6 +308,14 @@ apiRouter.get("/merchants", (req, res) => {
     mtdLabel: getMtdThroughYesterdayLabel(),
     currentMonth: getCurrentMonthLabel(),
   });
+});
+
+apiRouter.get("/merchants/mastercard-ranking", (req, res) => {
+  res.json(listMerchantMastercardLifetimeRank(req.user!.id, req.user!.role));
+});
+
+apiRouter.get("/overseas-cards/overview", (req, res) => {
+  res.json(getOverseasCardOverview(req.user!.id, req.user!.role));
 });
 
 apiRouter.get("/merchants/:id", (req, res) => {
@@ -705,7 +721,12 @@ apiRouter.put("/alert-rules/:period", adminOnly, (req, res) => {
 });
 
 apiRouter.get("/insight-settings", adminOnly, (_req, res) => {
-  res.json({ dailyDeclineThresholdPercent: getDailyDeclineThreshold() });
+  res.json({
+    dailyDeclineThresholdPercent: getDailyDeclineThreshold(),
+    mastercardLifetimeWarnHkd: getMastercardLifetimeWarnHkd(),
+    mastercardLifetimeAlertHkd: getMastercardLifetimeAlertHkd(),
+    mastercardLifetimeHighlightHkd: getMastercardLifetimeWarnHkd(),
+  });
 });
 
 apiRouter.put("/insight-settings/daily-decline-threshold", adminOnly, (req, res) => {
@@ -713,6 +734,26 @@ apiRouter.put("/insight-settings/daily-decline-threshold", adminOnly, (req, res)
     const { thresholdPercent } = req.body as { thresholdPercent?: number };
     const value = setDailyDeclineThreshold(Number(thresholdPercent));
     res.json({ dailyDeclineThresholdPercent: value });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "設定失敗" });
+  }
+});
+
+apiRouter.put("/insight-settings/mastercard-lifetime-highlight", adminOnly, (req, res) => {
+  try {
+    const { thresholdHkd } = req.body as { thresholdHkd?: number };
+    const value = setMastercardLifetimeWarnHkd(Number(thresholdHkd));
+    res.json({ mastercardLifetimeWarnHkd: value, mastercardLifetimeHighlightHkd: value });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "設定失敗" });
+  }
+});
+
+apiRouter.put("/insight-settings/mastercard-lifetime-alert", adminOnly, (req, res) => {
+  try {
+    const { thresholdHkd } = req.body as { thresholdHkd?: number };
+    const value = setMastercardLifetimeAlertHkd(Number(thresholdHkd));
+    res.json({ mastercardLifetimeAlertHkd: value });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : "設定失敗" });
   }
@@ -869,32 +910,40 @@ apiRouter.post("/import/batches/:id/assign-sales", adminOnly, (req, res) => {
 });
 
 apiRouter.get("/stats/overview", (req, res) => {
-  const merchants = listMerchantsForUser(req.user!.id, req.user!.role);
-  const alerts = getAlertsForUser(req.user!.id, req.user!.role) as { acknowledged: number }[];
-  const unreadAlerts = alerts.filter((a) => !a.acknowledged).length;
-  const monthlyStats = getDashboardMonthlyStats(req.user!.id, req.user!.role);
-  const transactionFailures = getTransactionFailureSummary(req.user!.id, req.user!.role);
-  const tigerTeam =
-    req.user!.role === "admin" ? getTigerTeamDashboardSummary() : undefined;
-  const leaderTeam =
-    req.user!.role === "leader" ? getLeaderTeamDashboardSummary(req.user!.id) : undefined;
-  const alertDigest = req.user!.role === "admin" ? getWeeklyAlertDigest() : undefined;
-  const homeInsight =
-    req.user!.role === "sales" || req.user!.role === "leader"
-      ? getSalesHomeInsightSnapshot(req.user!.id, req.user!.role)
-      : undefined;
+  const role = req.user!.role;
+  const userId = req.user!.id;
+  const dashRole = personalDashboardRole(role);
+  const isAdmin = role === "admin";
+  const alertCounts = countAlertsForUser(userId, dashRole);
+  const transactionFailures = getTransactionFailureSummary(userId, dashRole);
+  const alertDigest = isAdmin ? getWeeklyAlertDigest() : undefined;
+  const homeInsight = isAdmin ? undefined : getDashboardHomeInsight(userId, role);
+  const adminCharts = isAdmin ? getAdminDashboardCharts(userId, role) : undefined;
+  const personalCharts =
+    role === "sales" || role === "leader" ? getPersonalDashboardCharts(userId) : undefined;
 
   res.json({
-    merchantCount: merchants.length,
-    activeAlerts: unreadAlerts,
-    unreadAlerts,
-    totalAlerts: alerts.length,
+    merchantCount: countMerchantsForUser(userId, dashRole),
+    activeAlerts: alertCounts.unread,
+    unreadAlerts: alertCounts.unread,
+    totalAlerts: alertCounts.total,
     transactionFailures,
-    monthlyStats,
-    tigerTeam,
-    leaderTeam,
+    monthlyStats: isAdmin ? undefined : getDashboardMonthlyStats(userId, dashRole),
+    adminCharts,
+    personalCharts,
+    dailyTrend: undefined,
+    rolling30: undefined,
+    tigerTeam: undefined,
     alertDigest,
     homeInsight,
+  });
+});
+
+apiRouter.get("/leader/team/overview", leaderOnly, (req, res) => {
+  const leaderId = req.user!.id;
+  res.json({
+    teamSummary: getLeaderTeamDashboardSummary(leaderId),
+    charts: getLeaderDashboardCharts(leaderId),
   });
 });
 

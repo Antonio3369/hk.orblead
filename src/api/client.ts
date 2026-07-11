@@ -128,6 +128,134 @@ export interface SalesHomeInsightSnapshot {
   unreadAlertMerchantCount: number;
 }
 
+export interface DashboardDayTrendPoint {
+  date: string;
+  label: string;
+  amount: number;
+  txnCount: number;
+}
+
+export interface DashboardRolling30Comparison {
+  recentLabel: string;
+  recentRangeLabel: string;
+  recentAmount: number;
+  recentTxnCount: number;
+  recentMerchantCount: number;
+  previousLabel: string;
+  previousRangeLabel: string;
+  previousAmount: number;
+  previousTxnCount: number;
+  previousMerchantCount: number;
+  amountChangePercent: number | null;
+  dailyAvgChangePercent: number | null;
+}
+
+export interface AdminMonthCompareSide {
+  label: string;
+  chartLabel: string;
+  year: number;
+  month: number;
+  totalAmount: number;
+  txnCount: number;
+  merchantCount: number;
+  days: number;
+}
+
+export interface AdminMonthCompare {
+  lastMonth: AdminMonthCompareSide;
+  previousMonth: AdminMonthCompareSide;
+  amountChangePercent: number | null;
+  dailyAvgChangePercent: number | null;
+}
+
+export interface AdminSalesRankRow {
+  rank: number;
+  id: number;
+  displayName: string;
+  lastMonthAmount: number;
+  sharePercent: number;
+  activeMerchantCount: number;
+  assignedMerchantCount: number;
+}
+
+export interface AdminMerchantInsightBucket {
+  key: "rising" | "declining" | "newSilent" | "flat";
+  label: string;
+  count: number;
+  percent: number;
+}
+
+export interface AdminMerchantRankRow {
+  rank: number;
+  id: number;
+  name: string;
+  salesName: string | null;
+  lastMonthAmount: number;
+  sharePercent: number;
+}
+
+export interface AdminDailyMonthCrossPoint {
+  day: number;
+  label: string;
+  currentAmount: number | null;
+  currentTxnCount: number | null;
+  lastAmount: number;
+  lastTxnCount: number;
+}
+
+export interface AdminDashboardCharts {
+  monthlyTrend: Array<{
+    year: number;
+    month: number;
+    label: string;
+    chartLabel: string;
+    totalAmount: number;
+    txnCount: number;
+    merchantCount: number;
+    isCurrent: boolean;
+  }>;
+  monthCompare: AdminMonthCompare;
+  salesRanking: {
+    rankMonth: string;
+    orgLastMonthTotal: number;
+    sales: AdminSalesRankRow[];
+  };
+  merchantInsight: {
+    rankMonth: string;
+    mtdLabel: string;
+    totalAssigned: number;
+    buckets: AdminMerchantInsightBucket[];
+  };
+  merchantBoxOffice: {
+    rankMonth: string;
+    orgLastMonthTotal: number;
+    merchants: AdminMerchantRankRow[];
+  };
+  dailyMonthCross: {
+    currentMonthLabel: string;
+    lastMonthLabel: string;
+    points: AdminDailyMonthCrossPoint[];
+  };
+}
+
+export interface PersonalDashboardCharts {
+  monthlyTrend: AdminDashboardCharts["monthlyTrend"];
+  monthCompare: AdminMonthCompare;
+  merchantInsight: AdminDashboardCharts["merchantInsight"];
+  dailyMonthCross: AdminDashboardCharts["dailyMonthCross"];
+}
+
+export type LeaderDashboardCharts = AdminDashboardCharts;
+
+export interface LeaderTeamOverview {
+  teamSummary: {
+    salesCount: number;
+    unreadAlerts: number;
+    salesWithUnread: number;
+  };
+  charts: LeaderDashboardCharts;
+}
+
 export interface SalesPeriodColumn {
   key: "twoMonthsAgo" | "lastMonth" | "currentMtd";
   title: string;
@@ -224,6 +352,105 @@ export interface MerchantSummary {
   status: MerchantInsightStatus;
   hasUnreadAlert: boolean;
   unreadAlertPeriods: Array<"week" | "month">;
+}
+
+export const MASTERCARD_LIFETIME_WARN_HKD = 1_300_000;
+export const MASTERCARD_LIFETIME_ALERT_HKD = 1_600_000;
+export const MASTERCARD_RANK_MIN_LIST_HKD = 1_000_000;
+/** @deprecated use MASTERCARD_LIFETIME_WARN_HKD */
+export const MASTERCARD_LIFETIME_HIGHLIGHT_HKD = MASTERCARD_LIFETIME_WARN_HKD;
+
+export interface MerchantMastercardRankRow {
+  rank: number;
+  id: number;
+  name: string;
+  merchantCode: string | null;
+  salesUserId: number | null;
+  salesName: string | null;
+  lifetimeAmount: number;
+  txnCount: number;
+  lastMastercardTxnTime: string | null;
+  reachedWarn: boolean;
+  reachedAlert: boolean;
+}
+
+export type OverseasCardScheme = "visa" | "mastercard" | "unionpay";
+
+export interface OverseasCardMonthRankRow {
+  rank: number;
+  id: number;
+  name: string;
+  merchantCode: string | null;
+  salesUserId: number | null;
+  salesName: string | null;
+  totalAmount: number;
+  merchantLastMonthTotal: number;
+  txnCount: number;
+  sharePercent: number;
+}
+
+export interface OverseasCardRepeatTxn {
+  id: number;
+  txnTime: string;
+  amount: number;
+  orderNo: string | null;
+}
+
+export interface OverseasCardRepeatGroup {
+  rank: number;
+  merchantId: number;
+  merchantName: string;
+  merchantCode: string | null;
+  salesUserId: number | null;
+  salesName: string | null;
+  scheme: "visa" | "mastercard";
+  cardNo: string;
+  hitCount: number;
+  bandAmount: number;
+  transactions: OverseasCardRepeatTxn[];
+}
+
+export interface OverseasCardLargeTxnRow {
+  rank: number;
+  id: number;
+  merchantId: number;
+  merchantName: string;
+  merchantCode: string | null;
+  salesUserId: number | null;
+  salesName: string | null;
+  scheme: OverseasCardScheme;
+  txnTime: string;
+  amount: number;
+  cardNo: string | null;
+  orderNo: string | null;
+}
+
+export interface OverseasCardOverview {
+  lastMonthRank: {
+    rankMonth: string;
+    rankLimit: number;
+    scopeNote: string;
+    orgTotal: number;
+    merchants: OverseasCardMonthRankRow[];
+  };
+  repeatCardHits: {
+    rangeLabel: string;
+    start: string;
+    end: string;
+    groups: OverseasCardRepeatGroup[];
+  };
+  largeTransactions: {
+    rangeLabel: string;
+    start: string;
+    end: string;
+    transactions: OverseasCardLargeTxnRow[];
+  };
+  thresholds: {
+    repeatBandMinHkd: number;
+    repeatBandMaxHkd: number;
+    repeatMinTxnCount: number;
+    largeTxnMinHkd: number;
+  };
 }
 
 export interface PeriodBucket {

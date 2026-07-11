@@ -271,8 +271,8 @@ export function importTransactionFile(
 
   const insertTxn = db.prepare(`
     INSERT OR IGNORE INTO transactions
-      (merchant_id, txn_name, txn_time, amount, detail, order_no, batch_id, pay_wallet, payment_channel)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (merchant_id, txn_name, txn_time, amount, detail, order_no, batch_id, pay_wallet, payment_channel, card_no)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertFailure = db.prepare(`
@@ -299,7 +299,8 @@ export function importTransactionFile(
         row.orderNo?.trim() || null,
         batchId,
         payWallet,
-        paymentChannel
+        paymentChannel,
+        row.cardNo?.trim() || null
       );
       if (r.changes > 0) imported++;
       else skipped++;

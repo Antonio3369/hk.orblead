@@ -14,6 +14,7 @@ export interface RawTransactionRow {
   salesName: string;
   payWallet?: string;
   orderNo?: string;
+  cardNo?: string;
 }
 
 export interface RawFailureRow {
@@ -30,7 +31,7 @@ export interface RawFailureRow {
 }
 
 /** 列名 → 字段（简体/繁体/英文） */
-const COLUMN_MAP: Record<string, keyof RawTransactionRow | "skip" | "orderType" | "status" | "txnType" | "payWallet" | "orderNo" | "currency" | "cardRegion"> = {
+const COLUMN_MAP: Record<string, keyof RawTransactionRow | "skip" | "orderType" | "status" | "txnType" | "payWallet" | "orderNo" | "currency" | "cardRegion" | "cardNo"> = {
   merchant: "merchantName",
   merchantname: "merchantName",
   商户: "merchantName",
@@ -101,6 +102,8 @@ const COLUMN_MAP: Record<string, keyof RawTransactionRow | "skip" | "orderType" 
   卡归属地: "cardRegion",
   卡歸屬地: "cardRegion",
   卡屬地: "cardRegion",
+  卡号: "cardNo",
+  卡號: "cardNo",
 
   sales: "salesName",
   salesname: "salesName",
@@ -119,7 +122,7 @@ const COLUMN_MAP: Record<string, keyof RawTransactionRow | "skip" | "orderType" 
 
 type ExtraIndexes = Partial<
   Record<
-    "orderType" | "status" | "txnType" | "payWallet" | "orderNo" | "currency" | "cardRegion",
+    "orderType" | "status" | "txnType" | "payWallet" | "orderNo" | "currency" | "cardRegion" | "cardNo",
     number
   >
 >;
@@ -366,7 +369,8 @@ export function parseTransactionFile(
       mapped === "payWallet" ||
       mapped === "orderNo" ||
       mapped === "currency" ||
-      mapped === "cardRegion"
+      mapped === "cardRegion" ||
+      mapped === "cardNo"
     ) {
       extra[mapped] = i;
     } else {
@@ -426,6 +430,7 @@ export function parseTransactionFile(
     const orderNo = cell(line, extra.orderNo);
     const currency = cell(line, extra.currency);
     const cardRegion = cell(line, extra.cardRegion);
+    const cardNo = cell(line, extra.cardNo);
 
     const txnName = buildTxnName(get("txnName"), txnType, payWallet, orderType);
     const txnTime = excelDateToIso(line[fieldIndexes.txnTime!]);
@@ -499,6 +504,7 @@ export function parseTransactionFile(
       salesName,
       payWallet,
       orderNo: orderNo || undefined,
+      cardNo: cardNo || undefined,
     });
   }
 

@@ -18,6 +18,9 @@ interface SalesHomeInsightPanelProps {
   scopeLabel: string;
   onOpenMerchants: (sort?: MerchantListSortKey) => void;
   onOpenAlerts: () => void;
+  /** 工作台 Hero 已展示 MTD 時，僅保留快捷跳轉 */
+  compact?: boolean;
+  merchantsLabel?: string;
 }
 
 function DailyAvgChange({ value }: { value: number | null }) {
@@ -39,6 +42,8 @@ export function SalesHomeInsightPanel({
   scopeLabel,
   onOpenMerchants,
   onOpenAlerts,
+  compact = false,
+  merchantsLabel = "我的商戶",
 }: SalesHomeInsightPanelProps) {
   const { insightSummary } = snapshot;
 
@@ -74,34 +79,42 @@ export function SalesHomeInsightPanel({
       <div className="sales-home-insight-head">
         <div>
           <p className="sales-home-insight-kicker">{scopeLabel}</p>
-          <h2 className="panel-title sales-home-insight-title">本月交易摘要</h2>
-          <p className="panel-desc panel-desc-tight">{snapshot.mtdLabel}</p>
+          <h2 className="panel-title sales-home-insight-title">
+            {compact ? "商戶快捷篩選" : "本月交易摘要"}
+          </h2>
+          {!compact ? <p className="panel-desc panel-desc-tight">{snapshot.mtdLabel}</p> : null}
         </div>
         <button type="button" className="btn btn-sm btn-brutalist" onClick={() => onOpenMerchants()}>
-          我的商戶 →
+          {merchantsLabel} →
         </button>
       </div>
 
-      <div className="sales-home-insight-hero">
-        <p className="sales-home-insight-amount">{formatHkd(snapshot.mtdAmount)}</p>
-        <DailyAvgChange value={snapshot.dailyAvgChangePercent} />
-      </div>
+      {!compact ? (
+        <>
+          <div className="sales-home-insight-hero">
+            <p className="sales-home-insight-amount">{formatHkd(snapshot.mtdAmount)}</p>
+            <DailyAvgChange value={snapshot.dailyAvgChangePercent} />
+          </div>
 
-      <p className="sales-home-insight-meta">
-        活躍 <strong>{insightSummary.activeMerchantCount}</strong> 家 · 歸屬{" "}
-        <strong>{insightSummary.assignedMerchantCount}</strong> 家
-        {unreadAlerts > 0 ? (
-          <>
-            {" "}
-            ·{" "}
-            <button type="button" className="sales-home-insight-link" onClick={onOpenAlerts}>
-              {unreadAlerts} 條未跟進預警
-            </button>
-          </>
-        ) : null}
+          <p className="sales-home-insight-meta">
+            活躍 <strong>{insightSummary.activeMerchantCount}</strong> 家 · 歸屬{" "}
+            <strong>{insightSummary.assignedMerchantCount}</strong> 家
+            {unreadAlerts > 0 ? (
+              <>
+                {" "}
+                ·{" "}
+                <button type="button" className="sales-home-insight-link" onClick={onOpenAlerts}>
+                  {unreadAlerts} 條未跟進預警
+                </button>
+              </>
+            ) : null}
+          </p>
+        </>
+      ) : null}
+
+      <p className="panel-desc panel-desc-tight">
+        {compact ? "點擊標籤跳轉商戶列表對應篩選：" : "點擊下方標籤，跳轉至「我的商戶」對應篩選："}
       </p>
-
-      <p className="panel-desc panel-desc-tight">點擊下方標籤，跳轉至「我的商戶」對應篩選：</p>
       <div className="sales-home-insight-jumps">
         {jumps.map((item) => (
           <button

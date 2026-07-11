@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { AppLayout } from "@/components/AppLayout";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { DevThemeProvider } from "@/context/DevThemeContext";
+import type { NavKey } from "@/config/navigation";
 import { AdminPage } from "@/pages/AdminPage";
 import { AlertsPage } from "@/pages/AlertsPage";
 import { DashboardPage } from "@/pages/DashboardPage";
@@ -7,25 +10,35 @@ import { LoginPage } from "@/pages/LoginPage";
 import { MerchantPage } from "@/pages/MerchantPage";
 import { MerchantsPage } from "@/pages/MerchantsPage";
 import { CardFailuresPage } from "@/pages/CardFailuresPage";
+import { MastercardRankPage } from "@/pages/MastercardRankPage";
+import { OverseasCardPage } from "@/pages/OverseasCardPage";
+import { LeaderTeamPage } from "@/pages/LeaderTeamPage";
 import { TigerTeamPage } from "@/pages/TigerTeamPage";
 import { TigerTeamSalesPage } from "@/pages/TigerTeamSalesPage";
 import { SalesOversightDetailPage, type SalesOversightContext } from "@/pages/SalesOversightDetailPage";
 import { UserCenterPage } from "@/pages/UserCenterPage";
-import { SalesInsightSummaryPage } from "@/pages/SalesInsightSummaryPage";
 import { PageLoader } from "@/components/PageLoader";
 import type { MerchantListSortKey } from "@/api/client";
+import { getMainScrollTop, scrollMainTo, scrollMainToTop } from "@/utils/mainScroll";
+import { normalizeOpenMerchantsParams, type OpenMerchantsParams } from "@/utils/openMerchants";
+import type { SalesFilter } from "@/utils/salesFilter";
 
 type MainView =
   | "dashboard"
   | "alerts"
   | "cardFailures"
+  | "mastercardRank"
+  | "overseasCards"
   | "admin"
   | "tigerTeam"
   | "leaderTeam"
-  | "userCenter"
-  | "insightSummary";
+  | "userCenter";
 
-type MerchantsView = { type: "merchants"; viewSort?: MerchantListSortKey };
+type MerchantsView = {
+  type: "merchants";
+  viewSort?: MerchantListSortKey;
+  salesFilter?: SalesFilter;
+};
 type TeamSalesFrom = "tigerTeamSales" | "leaderTeamSales";
 type MerchantFrom = MainView | MerchantsView["type"] | TeamSalesFrom | "salesOversightDetail";
 
@@ -43,10 +56,16 @@ type View =
       salesOversight?: SalesOversightContext;
     };
 
-type ListScrollKey = "alerts" | "merchants" | "cardFailures";
+type ListScrollKey = "alerts" | "merchants" | "cardFailures" | "mastercardRank" | "overseasCards";
 
 function isListScrollKey(from: MerchantFrom): from is ListScrollKey {
-  return from === "alerts" || from === "merchants" || from === "cardFailures";
+  return (
+    from === "alerts" ||
+    from === "merchants" ||
+    from === "cardFailures" ||
+    from === "mastercardRank" ||
+    from === "overseasCards"
+  );
 }
 
 function listScrollStorageKey(from: ListScrollKey): string {
@@ -65,13 +84,46 @@ function writeListScroll(from: ListScrollKey, y: number, cache: Partial<Record<L
   sessionStorage.setItem(listScrollStorageKey(from), String(y));
 }
 
+function activeNavFromView(view: View): NavKey | null {
+  if (view.type === "merchant") {
+    if (view.from === "alerts" || view.from === "salesOversightDetail") return "alerts";
+    if (view.from === "merchants") return "merchants";
+    if (view.from === "cardFailures") return "cardFailures";
+    if (view.from === "mastercardRank") return "mastercardRank";
+    if (view.from === "overseasCards") return "overseasCards";
+    if (view.from === "tigerTeamSales") return "tigerTeam";
+    if (view.from === "leaderTeamSales") return "leaderTeam";
+    return "merchants";
+  }
+  if (view.type === "tigerTeamSales") return "tigerTeam";
+  if (view.type === "leaderTeamSales") return "leaderTeam";
+  if (view.type === "salesOversightDetail") return "alerts";
+  if (
+    view.type === "dashboard" ||
+    view.type === "alerts" ||
+    view.type === "merchants" ||
+    view.type === "cardFailures" ||
+    view.type === "mastercardRank" ||
+    view.type === "overseasCards" ||
+    view.type === "tigerTeam" ||
+    view.type === "leaderTeam" ||
+    view.type === "admin" ||
+    view.type === "userCenter"
+  ) {
+    return view.type;
+  }
+  return null;
+}
+
 function AppRoutes() {
   const { user, loading } = useAuth();
   const [view, setView] = useState<View>({ type: "dashboard" });
+  const [adminNavResetKey, setAdminNavResetKey] = useState(0);
   const listScrollRef = useRef<Partial<Record<ListScrollKey, number>>>({});
   const restoreScrollKeyRef = useRef<ListScrollKey | null>(null);
   const listAnchorRef = useRef<{ key: ListScrollKey; merchantId: number } | null>(null);
   const prevUserIdRef = useRef<number | null>(null);
+  const lastMerchantsViewRef = useRef<Pick<MerchantsView, "viewSort" | "salesFilter">>({});
 
   useEffect(() => {
     if (!user) {
@@ -95,7 +147,7 @@ function AppRoutes() {
     listAnchorRef.current = null;
 
     const restore = () => {
-      window.scrollTo(0, y);
+      scrollMainTo(y);
       if (anchor != null) {
         const el = document.querySelector(`[data-list-anchor-merchant="${anchor}"]`);
         if (el) el.scrollIntoView({ block: "center" });
@@ -123,13 +175,11 @@ function AppRoutes() {
     return <LoginPage />;
   }
 
-  const openAdmin = user.role === "admin" ? () => setView({ type: "admin" }) : undefined;
-  const openTigerTeam = user.role === "admin" ? () => setView({ type: "tigerTeam" }) : undefined;
-  const openLeaderTeam = user.role === "leader" ? () => setView({ type: "leaderTeam" }) : undefined;
-  const openUserCenter = () => setView({ type: "userCenter" });
-  const openMerchants = (viewSort?: MerchantListSortKey) => {
-    window.scrollTo(0, 0);
-    setView({ type: "merchants", viewSort });
+  const openMerchants = (params?: MerchantListSortKey | OpenMerchantsParams) => {
+    scrollMainToTop();
+    const next = { type: "merchants" as const, ...normalizeOpenMerchantsParams(params) };
+    lastMerchantsViewRef.current = { viewSort: next.viewSort, salesFilter: next.salesFilter };
+    setView(next);
   };
 
   const openMerchant = (
@@ -139,17 +189,20 @@ function AppRoutes() {
   ) => {
     if (from === "salesOversightDetail") {
       const salesOversight = ctx as SalesOversightContext;
-      window.scrollTo(0, 0);
+      scrollMainToTop();
       setView({ type: "merchant", id, from, salesOversight });
       return;
     }
 
     const salesUserId = typeof ctx === "number" ? ctx : undefined;
+    if (from === "merchants" && view.type === "merchants") {
+      lastMerchantsViewRef.current = { viewSort: view.viewSort, salesFilter: view.salesFilter };
+    }
     if (isListScrollKey(from)) {
-      writeListScroll(from, window.scrollY, listScrollRef.current);
+      writeListScroll(from, getMainScrollTop(), listScrollRef.current);
       listAnchorRef.current = { key: from, merchantId: id };
     }
-    window.scrollTo(0, 0);
+    scrollMainToTop();
     setView({ type: "merchant", id, from, salesUserId });
   };
 
@@ -167,86 +220,34 @@ function AppRoutes() {
       setView({ type: "tigerTeamSales", salesUserId });
     } else if (from === "leaderTeamSales" && salesUserId) {
       setView({ type: "leaderTeamSales", salesUserId });
-    } else if (from === "admin") {
-      setView({ type: "dashboard" });
     } else if (from === "alerts") {
       setView({ type: "alerts" });
+    } else if (from === "merchants") {
+      setView({ type: "merchants", ...lastMerchantsViewRef.current });
+    } else if (from === "admin") {
+      setView({ type: "dashboard" });
     } else {
-      setView({ type: from });
+      setView({ type: from as MainView });
     }
   };
 
-  if (view.type === "userCenter") {
-    return <UserCenterPage onBack={() => setView({ type: "dashboard" })} />;
-  }
-
-  if (view.type === "tigerTeamSales") {
-    return (
-      <TigerTeamSalesPage
-        salesUserId={view.salesUserId}
-        onBack={() => setView({ type: "tigerTeam" })}
-        onOpenMerchant={(id) => openMerchant(id, "tigerTeamSales", view.salesUserId)}
-      />
-    );
-  }
-
-  if (view.type === "leaderTeamSales") {
-    return (
-      <TigerTeamSalesPage
-        salesUserId={view.salesUserId}
-        apiPathPrefix="/leader/team"
-        scopeLabel="我的團隊"
-        backLabel="返回我的團隊"
-        onBack={() => setView({ type: "leaderTeam" })}
-        onOpenMerchant={(id) => openMerchant(id, "leaderTeamSales", view.salesUserId)}
-      />
-    );
-  }
-
-  if (view.type === "leaderTeam" && user.role === "leader") {
-    return (
-      <TigerTeamPage
-        title="我的團隊"
-        apiPath="/leader/team"
-        emptyHint="暫無歸屬銷售，請聯繫管理員在後臺為您配置團隊成員。"
-        onBack={() => setView({ type: "dashboard" })}
-        onOpenSales={(salesUserId) => setView({ type: "leaderTeamSales", salesUserId })}
-      />
-    );
-  }
-
-  if (view.type === "tigerTeam" && user.role === "admin") {
-    return (
-      <TigerTeamPage
-        onBack={() => setView({ type: "dashboard" })}
-        onOpenSales={(salesUserId) => setView({ type: "tigerTeamSales", salesUserId })}
-      />
-    );
-  }
-
-  if (view.type === "salesOversightDetail") {
-    return (
-      <SalesOversightDetailPage
-        salesUserId={view.salesUserId}
-        salesName={view.salesName}
-        periodFilter={view.periodFilter}
-        onBack={() => setView({ type: "alerts", adminTab: "sales" })}
-        onOpenMerchant={(id) =>
-          openMerchant(id, "salesOversightDetail", {
-            salesUserId: view.salesUserId,
-            salesName: view.salesName,
-            periodFilter: view.periodFilter,
-          })
-        }
-        onOpenAdmin={openAdmin}
-        onOpenUserCenter={openUserCenter}
-      />
-    );
-  }
-
-  if (view.type === "admin" && user.role === "admin") {
-    return <AdminPage onBack={() => setView({ type: "dashboard" })} />;
-  }
+  const navigate = (key: NavKey) => {
+    scrollMainToTop();
+    if (key === "alerts") {
+      setView({ type: "alerts" });
+      return;
+    }
+    if (key === "merchants") {
+      openMerchants();
+      return;
+    }
+    if (key === "admin") {
+      setAdminNavResetKey((k) => k + 1);
+      setView({ type: "admin" });
+      return;
+    }
+    setView({ type: key });
+  };
 
   const showAlerts =
     view.type === "alerts" || (view.type === "merchant" && view.from === "alerts");
@@ -254,21 +255,75 @@ function AppRoutes() {
     view.type === "merchants" || (view.type === "merchant" && view.from === "merchants");
   const showCardFailures =
     view.type === "cardFailures" || (view.type === "merchant" && view.from === "cardFailures");
+  const showMastercardRank =
+    view.type === "mastercardRank" || (view.type === "merchant" && view.from === "mastercardRank");
+  const showOverseasCards =
+    view.type === "overseasCards" || (view.type === "merchant" && view.from === "overseasCards");
 
   return (
-    <>
+    <AppLayout activeNav={activeNavFromView(view)} onNavigate={navigate}>
+      {view.type === "userCenter" ? <UserCenterPage /> : null}
+
+      {view.type === "tigerTeamSales" ? (
+        <TigerTeamSalesPage
+          salesUserId={view.salesUserId}
+          onBack={() => setView({ type: "tigerTeam" })}
+          onOpenMerchant={(id) => openMerchant(id, "tigerTeamSales", view.salesUserId)}
+        />
+      ) : null}
+
+      {view.type === "leaderTeamSales" ? (
+        <TigerTeamSalesPage
+          salesUserId={view.salesUserId}
+          apiPathPrefix="/leader/team"
+          scopeLabel="我的團隊"
+          backLabel="返回我的團隊"
+          onBack={() => setView({ type: "leaderTeam" })}
+          onOpenMerchant={(id) => openMerchant(id, "leaderTeamSales", view.salesUserId)}
+        />
+      ) : null}
+
+      {view.type === "leaderTeam" && user.role === "leader" ? (
+        <LeaderTeamPage
+          onOpenSales={(salesUserId) => setView({ type: "leaderTeamSales", salesUserId })}
+          onOpenMerchant={(id) => openMerchant(id, "leaderTeam")}
+          onOpenMerchants={openMerchants}
+        />
+      ) : null}
+
+      {view.type === "tigerTeam" && user.role === "admin" ? (
+        <TigerTeamPage onOpenSales={(salesUserId) => setView({ type: "tigerTeamSales", salesUserId })} />
+      ) : null}
+
+      {view.type === "salesOversightDetail" ? (
+        <SalesOversightDetailPage
+          salesUserId={view.salesUserId}
+          salesName={view.salesName}
+          periodFilter={view.periodFilter}
+          onBack={() => setView({ type: "alerts", adminTab: "sales" })}
+          onOpenMerchant={(id) =>
+            openMerchant(id, "salesOversightDetail", {
+              salesUserId: view.salesUserId,
+              salesName: view.salesName,
+              periodFilter: view.periodFilter,
+            })
+          }
+        />
+      ) : null}
+
+      {view.type === "admin" && user.role === "admin" ? (
+        <AdminPage navResetKey={adminNavResetKey} />
+      ) : null}
+
       {showAlerts ? (
         <div hidden={view.type !== "alerts"}>
           <AlertsPage
-            onBack={() => setView({ type: "dashboard" })}
             onOpenMerchant={(id) => openMerchant(id, "alerts")}
             onOpenSalesOversight={(ctx) => {
-              window.scrollTo(0, 0);
+              scrollMainToTop();
               setView({ type: "salesOversightDetail", ...ctx });
             }}
-            initialAdminView={view.type === "alerts" ? view.adminTab : undefined}
-            onOpenAdmin={openAdmin}
-            onOpenUserCenter={openUserCenter}
+            initialAdminView={view.type === "alerts" && "adminTab" in view ? view.adminTab : undefined}
           />
         </div>
       ) : null}
@@ -277,22 +332,27 @@ function AppRoutes() {
         <div hidden={view.type !== "merchants"}>
           <MerchantsPage
             initialViewSort={view.type === "merchants" ? view.viewSort : undefined}
-            onBack={() => setView({ type: "dashboard" })}
+            initialSalesFilter={view.type === "merchants" ? view.salesFilter : undefined}
             onOpenMerchant={(id) => openMerchant(id, "merchants")}
-            onOpenAdmin={openAdmin}
-            onOpenUserCenter={openUserCenter}
           />
         </div>
       ) : null}
 
       {showCardFailures ? (
         <div hidden={view.type !== "cardFailures"}>
-          <CardFailuresPage
-            onBack={() => setView({ type: "dashboard" })}
-            onOpenMerchant={(id) => openMerchant(id, "cardFailures")}
-            onOpenAdmin={openAdmin}
-            onOpenUserCenter={openUserCenter}
-          />
+          <CardFailuresPage onOpenMerchant={(id) => openMerchant(id, "cardFailures")} />
+        </div>
+      ) : null}
+
+      {showMastercardRank ? (
+        <div hidden={view.type !== "mastercardRank"}>
+          <MastercardRankPage onOpenMerchant={(id) => openMerchant(id, "mastercardRank")} />
+        </div>
+      ) : null}
+
+      {showOverseasCards ? (
+        <div hidden={view.type !== "overseasCards"}>
+          <OverseasCardPage onOpenMerchant={(id) => openMerchant(id, "overseasCards")} />
         </div>
       ) : null}
 
@@ -300,38 +360,25 @@ function AppRoutes() {
         <MerchantPage merchantId={view.id} onBack={backFromMerchant} />
       ) : null}
 
-      {view.type === "insightSummary" ? (
-        <SalesInsightSummaryPage
-          onBack={() => setView({ type: "dashboard" })}
-          onOpenMerchants={openMerchants}
-          onOpenAlerts={() => setView({ type: "alerts" })}
-          onOpenAdmin={openAdmin}
-          onOpenUserCenter={openUserCenter}
-        />
-      ) : null}
-
       {view.type === "dashboard" ? (
         <DashboardPage
           onOpenAlerts={() => setView({ type: "alerts" })}
           onOpenMerchants={openMerchants}
-          onOpenCardFailures={() => setView({ type: "cardFailures" })}
-          onOpenInsightSummary={
-            user.role === "sales" ? () => setView({ type: "insightSummary" }) : undefined
-          }
-          onOpenAdmin={openAdmin}
-          onOpenTigerTeam={openTigerTeam}
-          onOpenLeaderTeam={openLeaderTeam}
-          onOpenUserCenter={openUserCenter}
+          onOpenMerchant={(id) => openMerchant(id, "dashboard")}
+          onOpenTigerTeam={() => setView({ type: "tigerTeam" })}
+          onOpenTigerTeamSales={(salesUserId) => setView({ type: "tigerTeamSales", salesUserId })}
         />
       ) : null}
-    </>
+    </AppLayout>
   );
 }
 
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <DevThemeProvider>
+        <AppRoutes />
+      </DevThemeProvider>
     </AuthProvider>
   );
 }

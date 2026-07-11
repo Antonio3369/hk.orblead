@@ -21,6 +21,7 @@ COPYFILE_DISABLE=1 tar czf "$OUT" \
   --exclude=tools \
   --exclude=secrets \
   --exclude=release \
+  --exclude=numbers \
   --exclude=.git \
   --exclude='._*' \
   --exclude=.DS_Store \

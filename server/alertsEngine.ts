@@ -150,6 +150,37 @@ export function getAlertsForUser(userId: number, role: string, period?: PeriodTy
   return filterPeriod ? db.prepare(sql).all(userId, filterPeriod) : db.prepare(sql).all(userId);
 }
 
+export function countAlertsForUser(userId: number, role: string): { total: number; unread: number } {
+  const periodClause = "AND a.period IN ('week', 'month')";
+
+  if (role === "admin") {
+    const total = (db.prepare(`SELECT COUNT(*) as c FROM alerts a WHERE 1=1 ${periodClause}`).get() as { c: number }).c;
+    const unread = (
+      db.prepare(`SELECT COUNT(*) as c FROM alerts a WHERE a.acknowledged = 0 ${periodClause}`).get() as { c: number }
+    ).c;
+    return { total, unread };
+  }
+
+  if (role === "leader") {
+    const teamIds = getLeaderSalesUserIds(userId);
+    const ids = [userId, ...teamIds];
+    const placeholders = ids.map(() => "?").join(", ");
+    const base = `FROM alerts a JOIN merchants m ON m.id = a.merchant_id WHERE m.sales_user_id IN (${placeholders}) ${periodClause}`;
+    const total = (db.prepare(`SELECT COUNT(*) as c ${base}`).get(...ids) as { c: number }).c;
+    const unread = (
+      db.prepare(`SELECT COUNT(*) as c ${base} AND a.acknowledged = 0`).get(...ids) as { c: number }
+    ).c;
+    return { total, unread };
+  }
+
+  const base = `FROM alerts a JOIN merchants m ON m.id = a.merchant_id WHERE m.sales_user_id = ? ${periodClause}`;
+  const total = (db.prepare(`SELECT COUNT(*) as c ${base}`).get(userId) as { c: number }).c;
+  const unread = (
+    db.prepare(`SELECT COUNT(*) as c ${base} AND a.acknowledged = 0`).get(userId) as { c: number }
+  ).c;
+  return { total, unread };
+}
+
 export function getAlertsForSalesUser(salesUserId: number, leaderUserId: number | null = null) {
   const select = alertEnrichmentSelect(leaderUserId);
   const sql = `${select}

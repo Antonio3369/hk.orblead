@@ -3,12 +3,12 @@ import { getLeaderSalesUserIds } from "./leaderTeam.js";
 import { OVERSEAS_CARD_TXN_SQL, SUCCESS_CONSUMPTION_TXN_SQL } from "./paymentChannel.js";
 
 export const OVERSEAS_MONTH_RANK_LIMIT = 10;
-export const OVERSEAS_REPEAT_BAND_MIN_HKD = 3_500;
+export const OVERSEAS_REPEAT_BAND_MIN_HKD = 3_000;
 export const OVERSEAS_REPEAT_BAND_MAX_HKD = 5_000;
 export const OVERSEAS_REPEAT_MIN_TXN_COUNT = 2;
 export const OVERSEAS_LARGE_TXN_MIN_HKD = 50_000;
 export const OVERSEAS_CARD_SCOPE_NOTE =
-  "Visa、Mastercard、銀聯刷卡成功消費（不含交易失敗、不含微信/支付寶掃碼）";
+  "卡歸屬地為「外地／境外卡」的 Visa、Mastercard、銀聯刷卡成功消費（不含交易失敗、不含微信/支付寶掃碼；旧报表无此列则无法统计）";
 
 export interface OverseasCardMonthRankRow {
   rank: number;
@@ -18,7 +18,8 @@ export interface OverseasCardMonthRankRow {
   salesUserId: number | null;
   salesName: string | null;
   totalAmount: number;
-  merchantLastMonthTotal: number;
+  /** 该商户本月（排名窗口内）成功消费总额 */
+  merchantMonthTotal: number;
   txnCount: number;
   sharePercent: number;
 }
@@ -37,7 +38,7 @@ export interface OverseasCardRepeatGroup {
   merchantCode: string | null;
   salesUserId: number | null;
   salesName: string | null;
-  scheme: "visa" | "mastercard";
+  scheme: "visa" | "mastercard" | "unionpay";
   cardNo: string;
   hitCount: number;
   bandAmount: number;
@@ -69,21 +70,114 @@ function merchantAccessClause(role: string, userId: number, alias = "m"): { clau
   return { clause: `AND ${alias}.sales_user_id = ?`, params: [userId] };
 }
 
-function previousCalendarMonthYm(): string {
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+function currentMonthRankRange(): { start: string; end: string; label: string } {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const month = now.getMonth() + 1;
+
+  if (yesterday < monthStart) {
+    return {
+      start: fmt(monthStart),
+      end: fmt(monthStart),
+      label: `${now.getFullYear()}年${month}月（今日為月初，暫無本月數據）`,
+    };
+  }
+
+  const endDay = yesterday.getDate();
+  const span = endDay <= 1 ? `${month}月1日` : `${month}月1日–${endDay}日`;
+  return {
+    start: fmt(monthStart),
+    end: fmt(yesterday),
+    label: `${now.getFullYear()}年${span}`,
+  };
 }
 
-function previousCalendarMonthLabel(): string {
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() - 1);
-  return `${d.getFullYear()}年${d.getMonth() + 1}月`;
-}
+function listCurrentMonthMerchantRank(userId: number, role: string): {
+  rankMonth: string;
+  rankLimit: number;
+  scopeNote: string;
+  orgTotal: number;
+  merchants: OverseasCardMonthRankRow[];
+} {
+  const access = merchantAccessClause(role, userId);
+  const range = currentMonthRankRange();
+  const txnFilter = overseasTxnFilters("t");
 
-/** 近 3 個自然日（不含今天）：大前天、前天、昨天 */
+  const orgTotalRow = db
+    .prepare(
+      `
+    SELECT COALESCE(SUM(t.amount), 0) as orgTotal
+    FROM transactions t
+    INNER JOIN merchants m ON m.id = t.merchant_id
+    WHERE ${txnFilter}
+      AND substr(t.txn_time, 1, 10) >= ? AND substr(t.txn_time, 1, 10) <= ?
+      ${access.clause}`
+    )
+    .get(range.start, range.end, ...access.params) as { orgTotal: number };
+  const orgTotal = Math.round((orgTotalRow?.orgTotal ?? 0) * 100) / 100;
+
+  const sql = `
+    SELECT m.id, m.name, m.merchant_code as merchantCode, m.sales_user_id as salesUserId,
+      m.sales_name as salesName,
+      COALESCE(SUM(CASE WHEN ${OVERSEAS_CARD_TXN_SQL} THEN t.amount ELSE 0 END), 0) as totalAmount,
+      COALESCE(SUM(t.amount), 0) as merchantMonthTotal,
+      COALESCE(SUM(CASE WHEN ${OVERSEAS_CARD_TXN_SQL} THEN 1 ELSE 0 END), 0) as txnCount
+    FROM merchants m
+    INNER JOIN transactions t ON t.merchant_id = m.id
+      AND substr(t.txn_time, 1, 10) >= ? AND substr(t.txn_time, 1, 10) <= ?
+      AND ${SUCCESS_CONSUMPTION_TXN_SQL}
+    WHERE 1=1 ${access.clause}
+    GROUP BY m.id
+    HAVING totalAmount > 0
+    ORDER BY totalAmount DESC, m.name ASC
+    LIMIT ?`;
+
+  const rows = db.prepare(sql).all(range.start, range.end, ...access.params, OVERSEAS_MONTH_RANK_LIMIT) as Array<{
+    id: number;
+    name: string;
+    merchantCode: string | null;
+    salesUserId: number | null;
+    salesName: string | null;
+    totalAmount: number;
+    merchantMonthTotal: number;
+    txnCount: number;
+  }>;
+
+  const merchants = rows.map((row, index) => {
+    const totalAmount = Math.round(row.totalAmount * 100) / 100;
+    const merchantMonthTotal = Math.round(row.merchantMonthTotal * 100) / 100;
+    return {
+      rank: index + 1,
+      id: row.id,
+      name: row.name,
+      merchantCode: row.merchantCode,
+      salesUserId: row.salesUserId,
+      salesName: row.salesName,
+      totalAmount,
+      merchantMonthTotal,
+      /** @deprecated 兼容旧前端字段名 */
+      merchantLastMonthTotal: merchantMonthTotal,
+      txnCount: row.txnCount,
+      sharePercent:
+        merchantMonthTotal > 0
+          ? Math.round((totalAmount / merchantMonthTotal) * 1000) / 10
+          : 0,
+    };
+  });
+
+  return {
+    rankMonth: range.label,
+    rankLimit: OVERSEAS_MONTH_RANK_LIMIT,
+    scopeNote: OVERSEAS_CARD_SCOPE_NOTE,
+    orgTotal,
+    merchants,
+  };
+}
 function getRecentThreeDayRange(): { start: string; end: string; label: string } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -115,86 +209,6 @@ function classifySchemeFromRow(payWallet: string | null, txnName: string): "visa
   return "unionpay";
 }
 
-function listLastMonthMerchantRank(userId: number, role: string): {
-  rankMonth: string;
-  rankLimit: number;
-  scopeNote: string;
-  orgTotal: number;
-  merchants: OverseasCardMonthRankRow[];
-} {
-  const access = merchantAccessClause(role, userId);
-  const ym = previousCalendarMonthYm();
-  const txnFilter = overseasTxnFilters("t");
-
-  const orgTotalRow = db
-    .prepare(
-      `
-    SELECT COALESCE(SUM(t.amount), 0) as orgTotal
-    FROM transactions t
-    INNER JOIN merchants m ON m.id = t.merchant_id
-    WHERE ${txnFilter}
-      AND strftime('%Y-%m', t.txn_time) = ?
-      ${access.clause}`
-    )
-    .get(ym, ...access.params) as { orgTotal: number };
-  const orgTotal = Math.round((orgTotalRow?.orgTotal ?? 0) * 100) / 100;
-
-  const sql = `
-    SELECT m.id, m.name, m.merchant_code as merchantCode, m.sales_user_id as salesUserId,
-      m.sales_name as salesName,
-      COALESCE(SUM(CASE WHEN ${OVERSEAS_CARD_TXN_SQL} THEN t.amount ELSE 0 END), 0) as totalAmount,
-      COALESCE(SUM(t.amount), 0) as merchantMonthTotal,
-      COALESCE(SUM(CASE WHEN ${OVERSEAS_CARD_TXN_SQL} THEN 1 ELSE 0 END), 0) as txnCount
-    FROM merchants m
-    INNER JOIN transactions t ON t.merchant_id = m.id
-      AND strftime('%Y-%m', t.txn_time) = ?
-      AND ${SUCCESS_CONSUMPTION_TXN_SQL}
-    WHERE 1=1 ${access.clause}
-    GROUP BY m.id
-    HAVING totalAmount > 0
-    ORDER BY totalAmount DESC, m.name ASC
-    LIMIT ?`;
-
-  const rows = db.prepare(sql).all(ym, ...access.params, OVERSEAS_MONTH_RANK_LIMIT) as Array<{
-    id: number;
-    name: string;
-    merchantCode: string | null;
-    salesUserId: number | null;
-    salesName: string | null;
-    totalAmount: number;
-    merchantMonthTotal: number;
-    txnCount: number;
-  }>;
-
-  const merchants = rows.map((row, index) => {
-    const totalAmount = Math.round(row.totalAmount * 100) / 100;
-    const merchantLastMonthTotal = Math.round(row.merchantMonthTotal * 100) / 100;
-    return {
-      rank: index + 1,
-      id: row.id,
-      name: row.name,
-      merchantCode: row.merchantCode,
-      salesUserId: row.salesUserId,
-      salesName: row.salesName,
-      totalAmount,
-      merchantLastMonthTotal,
-      txnCount: row.txnCount,
-      sharePercent:
-        merchantLastMonthTotal > 0
-          ? Math.round((totalAmount / merchantLastMonthTotal) * 1000) / 10
-          : 0,
-    };
-  });
-
-  return {
-    rankMonth: previousCalendarMonthLabel(),
-    rankLimit: OVERSEAS_MONTH_RANK_LIMIT,
-    scopeNote: OVERSEAS_CARD_SCOPE_NOTE,
-    orgTotal,
-    merchants,
-  };
-}
-
 function listRepeatCardGroups(userId: number, role: string): {
   rangeLabel: string;
   start: string;
@@ -204,10 +218,7 @@ function listRepeatCardGroups(userId: number, role: string): {
   const range = getRecentThreeDayRange();
   const access = merchantAccessClause(role, userId);
   const txnFilter = overseasTxnFilters("t");
-  const sql = `
-    SELECT m.id as merchantId, m.name as merchantName, m.merchant_code as merchantCode,
-      m.sales_user_id as salesUserId, m.sales_name as salesName,
-      TRIM(t.card_no) as cardNo,
+  const schemeCaseSql = `
       CASE
         WHEN (
           LOWER(COALESCE(t.pay_wallet, '') || ' ' || COALESCE(t.txn_name, '')) LIKE '%master%'
@@ -215,8 +226,20 @@ function listRepeatCardGroups(userId: number, role: string): {
           OR INSTR(COALESCE(t.pay_wallet, '') || COALESCE(t.txn_name, ''), '萬事達') > 0
         ) THEN 'mastercard'
         WHEN LOWER(COALESCE(t.pay_wallet, '') || ' ' || COALESCE(t.txn_name, '')) LIKE '%visa%' THEN 'visa'
+        WHEN (
+          LOWER(COALESCE(t.pay_wallet, '') || ' ' || COALESCE(t.txn_name, '')) LIKE '%union%pay%'
+          OR LOWER(COALESCE(t.pay_wallet, '') || ' ' || COALESCE(t.txn_name, '')) LIKE '%unionpay%'
+          OR INSTR(COALESCE(t.pay_wallet, '') || COALESCE(t.txn_name, ''), '银联') > 0
+          OR INSTR(COALESCE(t.pay_wallet, '') || COALESCE(t.txn_name, ''), '銀聯') > 0
+        ) THEN 'unionpay'
         ELSE NULL
-      END as scheme,
+      END`;
+
+  const sql = `
+    SELECT m.id as merchantId, m.name as merchantName, m.merchant_code as merchantCode,
+      m.sales_user_id as salesUserId, m.sales_name as salesName,
+      TRIM(t.card_no) as cardNo,
+      ${schemeCaseSql} as scheme,
       COUNT(*) as hitCount,
       COALESCE(SUM(t.amount), 0) as bandAmount
     FROM transactions t
@@ -244,7 +267,7 @@ function listRepeatCardGroups(userId: number, role: string): {
     salesUserId: number | null;
     salesName: string | null;
     cardNo: string;
-    scheme: "visa" | "mastercard";
+    scheme: "visa" | "mastercard" | "unionpay";
     hitCount: number;
     bandAmount: number;
   }>;
@@ -256,19 +279,7 @@ function listRepeatCardGroups(userId: number, role: string): {
       AND ${overseasTxnFilters("t")}
       AND substr(t.txn_time, 1, 10) >= ? AND substr(t.txn_time, 1, 10) <= ?
       AND t.amount >= ? AND t.amount <= ?
-      AND (
-        (? = 'visa' AND LOWER(COALESCE(t.pay_wallet, '') || ' ' || COALESCE(t.txn_name, '')) LIKE '%visa%'
-          AND NOT (
-            LOWER(COALESCE(t.pay_wallet, '') || ' ' || COALESCE(t.txn_name, '')) LIKE '%master%'
-            OR INSTR(COALESCE(t.pay_wallet, '') || COALESCE(t.txn_name, ''), '万事达') > 0
-            OR INSTR(COALESCE(t.pay_wallet, '') || COALESCE(t.txn_name, ''), '萬事達') > 0
-          ))
-        OR (? = 'mastercard' AND (
-          LOWER(COALESCE(t.pay_wallet, '') || ' ' || COALESCE(t.txn_name, '')) LIKE '%master%'
-          OR INSTR(COALESCE(t.pay_wallet, '') || COALESCE(t.txn_name, ''), '万事达') > 0
-          OR INSTR(COALESCE(t.pay_wallet, '') || COALESCE(t.txn_name, ''), '萬事達') > 0
-        ))
-      )
+      AND (${schemeCaseSql}) = ?
     ORDER BY t.txn_time DESC`;
 
   const txnStmt = db.prepare(txnSql);
@@ -281,7 +292,6 @@ function listRepeatCardGroups(userId: number, role: string): {
       range.end,
       OVERSEAS_REPEAT_BAND_MIN_HKD,
       OVERSEAS_REPEAT_BAND_MAX_HKD,
-      row.scheme,
       row.scheme
     ) as Array<{
       id: number;
@@ -375,8 +385,11 @@ function listLargeTxnRank(userId: number, role: string): {
 }
 
 export function getOverseasCardOverview(userId: number, role: string) {
+  const currentMonthRank = listCurrentMonthMerchantRank(userId, role);
   return {
-    lastMonthRank: listLastMonthMerchantRank(userId, role),
+    currentMonthRank,
+    /** @deprecated 旧字段名，与 currentMonthRank 相同（兼容未刷新的前端） */
+    lastMonthRank: currentMonthRank,
     repeatCardHits: listRepeatCardGroups(userId, role),
     largeTransactions: listLargeTxnRank(userId, role),
     thresholds: {

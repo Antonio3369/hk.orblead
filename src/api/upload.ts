@@ -3,6 +3,7 @@ export interface ImportResult {
   error?: string;
   imported?: number;
   skipped?: number;
+  cardRegionFilled?: number;
   failuresImported?: number;
   failuresSkipped?: number;
   message?: string;
@@ -27,10 +28,18 @@ export function uploadImportFile(
     xhr.open("POST", "/api/import");
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
 
+    xhr.upload.addEventListener("loadstart", () => {
+      onUploadProgress(0);
+    });
+
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable && e.total > 0) {
         onUploadProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
       }
+    });
+
+    xhr.upload.addEventListener("load", () => {
+      onUploadProgress(100);
     });
 
     xhr.addEventListener("load", () => {
@@ -83,10 +92,18 @@ export function uploadLimitFile(
     xhr.open("POST", "/api/import/limits");
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
 
+    xhr.upload.addEventListener("loadstart", () => {
+      onUploadProgress(0);
+    });
+
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable && e.total > 0) {
         onUploadProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
       }
+    });
+
+    xhr.upload.addEventListener("load", () => {
+      onUploadProgress(100);
     });
 
     xhr.addEventListener("load", () => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   api,
   formatChangePercent,
@@ -7,6 +7,7 @@ import {
   type MerchantListSortKey,
   type PersonalDashboardCharts,
   type SalesHomeInsightSnapshot,
+  type TigerTeamSalesRow,
   type WeeklyAlertDigest,
 } from "@/api/client";
 import { PageLoader } from "@/components/PageLoader";
@@ -14,10 +15,12 @@ import { AppShell } from "@/components/AppShell";
 import { AlertDigestBanner } from "@/components/AlertDigestBanner";
 import { AdminDashboardPanel } from "@/components/AdminDashboardPanel";
 import { PersonalDashboardPanel } from "@/components/PersonalDashboardPanel";
+import { WorkbenchNarrative } from "@/components/WorkbenchNarrative";
 import { useAuth } from "@/context/AuthContext";
 import { BRAND } from "@/config/branding";
 import { LEADER_PERSONAL_SCOPE_HINT, merchantsNavLabel } from "@/config/navigation";
 import type { OpenMerchantsParams } from "@/utils/openMerchants";
+import { buildWorkbenchNarrative } from "@/utils/workbenchNarrative";
 
 interface DashboardPageProps {
   onOpenAlerts: () => void;
@@ -60,6 +63,7 @@ export function DashboardPage({
   });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [teamSales, setTeamSales] = useState<TigerTeamSalesRow[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -70,10 +74,40 @@ export function DashboardPage({
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (user?.role !== "leader") {
+      setTeamSales([]);
+      return;
+    }
+    api<{ sales: TigerTeamSalesRow[] }>("/leader/team")
+      .then((res) => setTeamSales(res.sales))
+      .catch(() => setTeamSales([]));
+  }, [user?.role]);
+
   const isAdmin = user?.role === "admin";
   const isLeader = user?.role === "leader";
   const isPersonalDashboard = user?.role === "sales" || isLeader;
   const teamMerchantsLabel = isLeader ? merchantsNavLabel("leader") : "我的商戶";
+
+  const narrative = useMemo(() => {
+    if (!user) return null;
+    const role = user.role === "admin" ? "admin" : user.role === "leader" ? "leader" : "sales";
+    const monthCompare = isAdmin
+      ? overview.adminCharts?.monthCompare
+      : overview.personalCharts?.monthCompare;
+    const buckets = isAdmin
+      ? overview.adminCharts?.merchantInsight.buckets
+      : overview.personalCharts?.merchantInsight.buckets;
+    return buildWorkbenchNarrative({
+      displayName: user.displayName,
+      role,
+      monthCompare,
+      buckets,
+      teamUnread: isLeader
+        ? teamSales.map((s) => ({ displayName: s.displayName, unreadAlerts: s.unreadAlerts }))
+        : undefined,
+    });
+  }, [user, isAdmin, isLeader, overview.adminCharts, overview.personalCharts, teamSales]);
 
   return (
     <AppShell
@@ -99,20 +133,24 @@ export function DashboardPage({
       {loading ? (
         <PageLoader block />
       ) : isAdmin && overview.adminCharts ? (
-        <AdminDashboardPanel
-          charts={overview.adminCharts}
-          unreadAlerts={overview.unreadAlerts}
-          totalAlerts={overview.totalAlerts}
-          merchantCount={overview.merchantCount}
-          transactionFailures={overview.transactionFailures}
-          onOpenAlerts={onOpenAlerts}
-          onOpenMerchants={onOpenMerchants}
-          onOpenMerchant={(id) => onOpenMerchant?.(id)}
-          onOpenTigerTeamSales={(id) => onOpenTigerTeamSales?.(id)}
-          onOpenTigerTeam={() => onOpenTigerTeam?.()}
-        />
+        <>
+          {narrative ? <WorkbenchNarrative parts={narrative} /> : null}
+          <AdminDashboardPanel
+            charts={overview.adminCharts}
+            unreadAlerts={overview.unreadAlerts}
+            totalAlerts={overview.totalAlerts}
+            merchantCount={overview.merchantCount}
+            transactionFailures={overview.transactionFailures}
+            onOpenAlerts={onOpenAlerts}
+            onOpenMerchants={onOpenMerchants}
+            onOpenMerchant={(id) => onOpenMerchant?.(id)}
+            onOpenTigerTeamSales={(id) => onOpenTigerTeamSales?.(id)}
+            onOpenTigerTeam={() => onOpenTigerTeam?.()}
+          />
+        </>
       ) : isPersonalDashboard ? (
         <>
+          {narrative ? <WorkbenchNarrative parts={narrative} /> : null}
           {overview.homeInsight ? (
             <section className="panel dashboard-hero">
               <div className="dashboard-hero-head">

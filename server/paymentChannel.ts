@@ -33,13 +33,29 @@ export const UNIONPAY_TXN_SQL = `(
   OR INSTR(COALESCE(t.pay_wallet, '') || COALESCE(t.txn_name, ''), '銀聯') > 0
 )`;
 
-/** Visa / Mastercard / 銀聯（境外卡方案，不含微信/支付寶等掃碼） */
-export const OVERSEAS_CARD_TXN_SQL = `(${VISA_TXN_SQL} OR ${MASTERCARD_TXN_SQL} OR ${UNIONPAY_TXN_SQL})`;
+/** Visa / Mastercard / 銀聯刷卡渠道（不含微信/支付寶等掃碼） */
+export const CARD_SCHEME_TXN_SQL = `(${VISA_TXN_SQL} OR ${MASTERCARD_TXN_SQL} OR ${UNIONPAY_TXN_SQL})`;
+
+/**
+ * 卡歸屬地為境外：机构报表多为「外地」；部分导出为「境外卡」。
+ * 旧表无此列则为空，无法识别属预期。
+ */
+export const OVERSEAS_CARD_REGION_SQL = `TRIM(COALESCE(t.card_region, '')) IN ('外地', '境外卡')`;
+
+/**
+ * 境外卡：卡歸屬地為外地/境外卡，且為 Visa / Mastercard / 銀聯。
+ */
+export const OVERSEAS_CARD_TXN_SQL = `(${OVERSEAS_CARD_REGION_SQL} AND ${CARD_SCHEME_TXN_SQL})`;
 
 /** 成功消費：transactions 僅含導入成功的記錄；排除退款等負數 */
 export const SUCCESS_CONSUMPTION_TXN_SQL = `t.amount > 0`;
 
 export type OverseasCardScheme = "visa" | "mastercard" | "unionpay";
+
+export function isOverseasCardRegion(cardRegion: string): boolean {
+  const v = cardRegion.trim();
+  return v === "外地" || v === "境外卡";
+}
 
 export function classifyOverseasCardScheme(payWallet: string, txnName = ""): OverseasCardScheme | null {
   if (isMastercardTransaction(payWallet, txnName)) return "mastercard";
@@ -57,7 +73,13 @@ export function classifyOverseasCardScheme(payWallet: string, txnName = ""): Ove
   return null;
 }
 
-export function isOverseasCardTransaction(payWallet: string, txnName = ""): boolean {
+/** 是否境外卡：卡歸屬地為外地/境外卡，且支付渠道為 Visa / Mastercard / 銀聯 */
+export function isOverseasCardTransaction(
+  payWallet: string,
+  txnName = "",
+  cardRegion = ""
+): boolean {
+  if (!isOverseasCardRegion(cardRegion)) return false;
   return classifyOverseasCardScheme(payWallet, txnName) != null;
 }
 

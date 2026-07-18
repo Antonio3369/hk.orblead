@@ -18,6 +18,69 @@ interface AlertRule {
   enabled: number;
 }
 
+function recomputeAlertsForMerchantList(
+  merchants: { id: number; name: string }[],
+  rules: AlertRule[],
+  insert: ReturnType<typeof db.prepare>
+) {
+  for (const m of merchants) {
+    for (const rule of rules) {
+      const { current, previous, changePercent } = getPeriodChange(m.id, rule.period);
+      if (!current || !previous || changePercent === null) continue;
+
+      const triggered =
+        rule.direction === "decrease"
+          ? changePercent <= -rule.threshold_percent
+          : changePercent >= rule.threshold_percent;
+
+      if (!triggered) continue;
+
+      const periodLabel = rule.period === "week" ? "週" : "月";
+      const dirLabel = rule.direction === "decrease" ? "下降" : "上升";
+      const message = `【預警】商戶「${m.name}」${periodLabel}環比${dirLabel} ${formatChangePercent(Math.abs(changePercent))}%（${previous.label} HKD ${previous.amount.toLocaleString()} → ${current.label} HKD ${current.amount.toLocaleString()}），已超過 ${rule.threshold_percent}% 閾值`;
+
+      insert.run(
+        m.id,
+        rule.period,
+        current.label,
+        previous.label,
+        current.amount,
+        previous.amount,
+        changePercent,
+        message
+      );
+    }
+  }
+}
+
+/** 仅重算指定商户的预警（导入小批量新交易时用，避免全库扫描） */
+export function recomputeAlertsForMerchants(merchantIds: number[]) {
+  const uniqueIds = [...new Set(merchantIds.filter((id) => id > 0))];
+  if (uniqueIds.length === 0) return;
+
+  const rules = db
+    .prepare("SELECT * FROM alert_rules WHERE enabled = 1 AND period IN ('week', 'month')")
+    .all() as unknown as AlertRule[];
+  if (rules.length === 0) return;
+
+  const placeholders = uniqueIds.map(() => "?").join(", ");
+  db.prepare(`DELETE FROM alerts WHERE merchant_id IN (${placeholders})`).run(...uniqueIds);
+
+  const merchants = db
+    .prepare(`SELECT id, name FROM merchants WHERE id IN (${placeholders})`)
+    .all(...uniqueIds) as { id: number; name: string }[];
+
+  const insert = db.prepare(`
+    INSERT OR REPLACE INTO alerts
+    (merchant_id, period, current_label, previous_label, current_amount, previous_amount, change_percent, message)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  runTransaction(() => {
+    recomputeAlertsForMerchantList(merchants, rules, insert);
+  });
+}
+
 export function recomputeAllAlerts() {
   db.prepare("DELETE FROM alerts").run();
 
@@ -36,34 +99,7 @@ export function recomputeAllAlerts() {
   `);
 
   runTransaction(() => {
-    for (const m of merchants) {
-      for (const rule of rules) {
-        const { current, previous, changePercent } = getPeriodChange(m.id, rule.period);
-        if (!current || !previous || changePercent === null) continue;
-
-        const triggered =
-          rule.direction === "decrease"
-            ? changePercent <= -rule.threshold_percent
-            : changePercent >= rule.threshold_percent;
-
-        if (!triggered) continue;
-
-        const periodLabel = rule.period === "week" ? "週" : "月";
-        const dirLabel = rule.direction === "decrease" ? "下降" : "上升";
-        const message = `【預警】商戶「${m.name}」${periodLabel}環比${dirLabel} ${formatChangePercent(Math.abs(changePercent))}%（${previous.label} HKD ${previous.amount.toLocaleString()} → ${current.label} HKD ${current.amount.toLocaleString()}），已超過 ${rule.threshold_percent}% 閾值`;
-
-        insert.run(
-          m.id,
-          rule.period,
-          current.label,
-          previous.label,
-          current.amount,
-          previous.amount,
-          changePercent,
-          message
-        );
-      }
-    }
+    recomputeAlertsForMerchantList(merchants, rules, insert);
   });
 }
 

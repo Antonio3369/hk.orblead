@@ -15,6 +15,8 @@ export interface RawTransactionRow {
   payWallet?: string;
   orderNo?: string;
   cardNo?: string;
+  /** 卡歸屬地：外地 / 本地 / 不区分 / 未知（旧报表可能无此列） */
+  cardRegion?: string;
 }
 
 export interface RawFailureRow {
@@ -505,6 +507,7 @@ export function parseTransactionFile(
       payWallet,
       orderNo: orderNo || undefined,
       cardNo: cardNo || undefined,
+      cardRegion: cardRegion || undefined,
     });
   }
 

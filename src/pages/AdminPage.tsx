@@ -94,6 +94,7 @@ export function AdminPage({ navResetKey = 0 }: AdminPageProps) {
   const [section, setSection] = useState<AdminSection>("hub");
   const fileRef = useRef<HTMLInputElement>(null);
   const limitFileRef = useRef<HTMLInputElement>(null);
+  const uploadProgressFloor = useRef(0);
   const [limitUploadKind, setLimitUploadKind] = useState<"card" | "scan">("card");
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [dailyDeclineThreshold, setDailyDeclineThreshold] = useState("10");
@@ -198,6 +199,7 @@ export function AdminPage({ navResetKey = 0 }: AdminPageProps) {
     setMsg("");
     setUploadPhase("uploading");
     setUploadPercent(0);
+    uploadProgressFloor.current = 0;
 
     const token = localStorage.getItem("merchant-agent-token");
     if (!token) {
@@ -226,6 +228,10 @@ export function AdminPage({ navResetKey = 0 }: AdminPageProps) {
         skip > 0
           ? `${fileName}：新增 ${data.imported ?? 0} 筆，重複跳過 ${skip} 筆`
           : `${fileName}：新增 ${data.imported ?? 0} 筆`;
+      const filled = data.cardRegionFilled ?? 0;
+      if (filled > 0) {
+        note += `；補寫空的卡歸屬地 ${filled} 筆`;
+      }
       const fSkip = data.failuresSkipped ?? 0;
       if ((data.failuresImported ?? 0) > 0 || fSkip > 0) {
         note +=
@@ -253,14 +259,20 @@ export function AdminPage({ navResetKey = 0 }: AdminPageProps) {
         const scope = importMode === "failuresOnly" ? "failuresOnly" : undefined;
 
         const baseProgress = (i / list.length) * 100;
+        const fileStartPct = Math.min(99, Math.round(baseProgress));
+        uploadProgressFloor.current = Math.max(uploadProgressFloor.current, fileStartPct);
+        setUploadPercent(uploadProgressFloor.current);
+        if (i > 0) setUploadPhase("processing");
+
         const data = await uploadImportFile(
           file,
           mode,
           scope,
           token,
           (filePct) => {
-            const overall = Math.round(baseProgress + filePct / list.length);
-            setUploadPercent(Math.min(99, overall));
+            const overall = Math.min(99, Math.round(baseProgress + filePct / list.length));
+            uploadProgressFloor.current = Math.max(uploadProgressFloor.current, overall);
+            setUploadPercent(uploadProgressFloor.current);
             if (filePct >= 100) setUploadPhase("processing");
           },
           importSalesName || undefined
@@ -302,11 +314,12 @@ export function AdminPage({ navResetKey = 0 }: AdminPageProps) {
       setMsg(e instanceof Error ? e.message : "上傳失敗", "error");
     } finally {
       setUploading(false);
-      setUploadFileLabel("");
       if (fileRef.current) fileRef.current.value = "";
       setTimeout(() => {
         setUploadPhase("idle");
         setUploadPercent(0);
+        setUploadFileLabel("");
+        uploadProgressFloor.current = 0;
       }, 8000);
     }
   };
@@ -1115,8 +1128,12 @@ export function AdminPage({ navResetKey = 0 }: AdminPageProps) {
                 aria-valuemax={100}
               >
                 <div
-                  className={`upload-progress-fill ${uploadPhase === "processing" ? "upload-progress-fill--pulse" : ""}`}
-                  style={{ width: `${uploadPercent}%` }}
+                  className={`upload-progress-fill ${
+                    uploadPhase === "processing" || uploadPercent === 0
+                      ? "upload-progress-fill--pulse"
+                      : ""
+                  }`}
+                  style={{ width: `${Math.max(uploadPercent, uploadPhase === "idle" ? 0 : 4)}%` }}
                 />
               </div>
             </div>

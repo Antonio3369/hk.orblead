@@ -14,6 +14,7 @@
     "sandbox:open": "bash scripts/sandbox-dev.sh",
     "pack:deploy": "bash scripts/deploy-pack.sh",
     "pack:frontend": "bash scripts/deploy-frontend.sh",
+    "deploy": "bash deploy/push-and-deploy.sh",
     "email-import": "tsx server/emailImport/run.ts"
   },
   "dependencies": {

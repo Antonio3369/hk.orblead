@@ -4,6 +4,7 @@ import {
   formatHkd,
   type OverseasCardOverview,
   type OverseasCardRepeatGroup,
+  type OverseasCardMonthRankRow,
   type TigerTeamSalesRow,
 } from "@/api/client";
 import { AppShell } from "@/components/AppShell";
@@ -40,6 +41,14 @@ function matchSalesFilter(
   return salesUserId === filter;
 }
 
+function resolveMonthRank(data: OverseasCardOverview) {
+  return data.currentMonthRank ?? data.lastMonthRank ?? null;
+}
+
+function merchantMonthTotal(row: OverseasCardMonthRankRow): number {
+  return row.merchantMonthTotal ?? row.merchantLastMonthTotal ?? 0;
+}
+
 export function OverseasCardPage({ onOpenMerchant }: OverseasCardPageProps) {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -50,11 +59,17 @@ export function OverseasCardPage({ onOpenMerchant }: OverseasCardPageProps) {
   const [salesFilter, setSalesFilter] = useState<SalesFilter>("all");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
+    setLoadError(null);
     api<OverseasCardOverview>("/overseas-cards/overview")
       .then(setData)
+      .catch((err) => {
+        setData(null);
+        setLoadError(err instanceof Error ? err.message : "載入失敗");
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -65,12 +80,14 @@ export function OverseasCardPage({ onOpenMerchant }: OverseasCardPageProps) {
       .catch(() => setLeaderTeam([]));
   }, [isLeader]);
 
+  const monthRank = useMemo(() => (data ? resolveMonthRank(data) : null), [data]);
+
   const monthMerchants = useMemo(
     () =>
-      (data?.lastMonthRank.merchants ?? []).filter((m) =>
+      (monthRank?.merchants ?? []).filter((m) =>
         matchSalesFilter(m.salesUserId, salesFilter, user?.id)
       ),
-    [data, salesFilter, user?.id]
+    [monthRank, salesFilter, user?.id]
   );
 
   const repeatGroups = useMemo(
@@ -90,10 +107,10 @@ export function OverseasCardPage({ onOpenMerchant }: OverseasCardPageProps) {
   );
 
   const adminSalesOptions = useMemo(() => {
-    if (!isAdmin || !data) return [];
+    if (!isAdmin || !data || !monthRank) return [];
     const map = new Map<number | "unassigned", string>();
     for (const row of [
-      ...data.lastMonthRank.merchants,
+      ...monthRank.merchants,
       ...data.repeatCardHits.groups,
       ...data.largeTransactions.transactions,
     ]) {
@@ -105,17 +122,30 @@ export function OverseasCardPage({ onOpenMerchant }: OverseasCardPageProps) {
     return [...map.entries()]
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name, "zh-HK"));
-  }, [isAdmin, data]);
+  }, [isAdmin, data, monthRank]);
 
   const toggleRepeat = (group: OverseasCardRepeatGroup) => {
     const key = `${group.merchantId}-${group.scheme}-${group.cardNo}`;
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  if (loading || !data) {
+  if (loading) {
     return (
-      <AppShell title="境外卡交易" subtitle="Visa · Mastercard · 銀聯">
+      <AppShell title="境外卡交易" subtitle="卡歸屬地 · 外地 · Visa / Mastercard / 銀聯">
         <PageLoader block />
+      </AppShell>
+    );
+  }
+
+  if (loadError || !data || !monthRank) {
+    return (
+      <AppShell title="境外卡交易" subtitle="卡歸屬地 · 外地 · Visa / Mastercard / 銀聯">
+        <section className="panel">
+          <p className="form-error">{loadError ?? "境外卡數據格式異常，請刷新或聯繫管理員"}</p>
+          <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
+            重新載入
+          </button>
+        </section>
       </AppShell>
     );
   }
@@ -123,7 +153,7 @@ export function OverseasCardPage({ onOpenMerchant }: OverseasCardPageProps) {
   const { thresholds } = data;
 
   return (
-    <AppShell title="境外卡交易" subtitle="Visa · Mastercard · 銀聯">
+    <AppShell title="境外卡交易" subtitle="卡歸屬地 · 外地 · Visa / Mastercard / 銀聯">
       {showSalesFilter ? (
         <div className="merchant-toolbar overseas-card-toolbar">
           <SalesFilterSelect
@@ -150,14 +180,14 @@ export function OverseasCardPage({ onOpenMerchant }: OverseasCardPageProps) {
 
       <section className="panel">
         <div className="panel-intro">
-          <h2 className="panel-title">上月境外卡交易排名 · Top {data.lastMonthRank.rankLimit}</h2>
+          <h2 className="panel-title">本月境外卡交易排名 · Top {monthRank.rankLimit}</h2>
           <p className="panel-desc panel-desc-tight">
-            {data.lastMonthRank.rankMonth} · {data.lastMonthRank.scopeNote} · 全機構合計{" "}
-            {formatHkd(data.lastMonthRank.orgTotal)}
+            {monthRank.rankMonth} · {monthRank.scopeNote} · 全機構合計{" "}
+            {formatHkd(monthRank.orgTotal)}
           </p>
         </div>
         {monthMerchants.length === 0 ? (
-          <p className="muted">暫無上月境外卡交易記錄。</p>
+          <p className="muted">暫無本月境外卡交易記錄。</p>
         ) : (
           <div className="table-wrap">
             <table className="data-table">
@@ -167,7 +197,7 @@ export function OverseasCardPage({ onOpenMerchant }: OverseasCardPageProps) {
                   <th>商戶</th>
                   {showSalesFilter ? <th>歸屬銷售</th> : null}
                   <th>境外卡交易額</th>
-                  <th>占該商戶上月</th>
+                  <th>占該商戶本月</th>
                   <th>筆數</th>
                 </tr>
               </thead>
@@ -184,10 +214,10 @@ export function OverseasCardPage({ onOpenMerchant }: OverseasCardPageProps) {
                     <td data-label="境外卡交易額">
                       <strong>{formatHkd(m.totalAmount)}</strong>
                     </td>
-                    <td data-label="占該商戶上月">
+                    <td data-label="占該商戶本月">
                       {m.sharePercent.toFixed(1)}%
                       <span className="muted overseas-share-meta">
-                        / {formatHkd(m.merchantLastMonthTotal)}
+                        / {formatHkd(merchantMonthTotal(m))}
                       </span>
                     </td>
                     <td data-label="筆數">{m.txnCount.toLocaleString()}</td>
@@ -203,15 +233,15 @@ export function OverseasCardPage({ onOpenMerchant }: OverseasCardPageProps) {
         <div className="panel-intro">
           <h2 className="panel-title">同卡多筆交易（近 3 日）</h2>
           <p className="panel-desc panel-desc-tight">
-            {data.repeatCardHits.rangeLabel} · 僅統計<strong>交易成功</strong>的消費（不含交易失敗） ·
-            同一商戶 + 同一 Visa / Mastercard 卡號 · 單筆{" "}
+            {data.repeatCardHits.rangeLabel} · 卡歸屬地「外地／境外卡」· 僅統計<strong>交易成功</strong>的消費 ·
+            同一商戶 + 同一 Visa / Mastercard / 銀聯卡號 · 單筆{" "}
             {formatHkd(thresholds.repeatBandMinHkd)}–{formatHkd(thresholds.repeatBandMaxHkd)} · ≥{" "}
             {thresholds.repeatMinTxnCount} 筆
           </p>
         </div>
         {repeatGroups.length === 0 ? (
           <p className="muted">
-            近 3 日暫無符合條件的多筆交易。若長期為空，請確認機構報表已導入並帶有卡號欄位。
+            近 3 日暫無符合條件的多筆交易。若長期為空，請確認已導入含「卡歸屬地」的機構報表，且帶有卡號欄位。
           </p>
         ) : (
           <div className="table-wrap">
@@ -305,7 +335,7 @@ export function OverseasCardPage({ onOpenMerchant }: OverseasCardPageProps) {
           <h2 className="panel-title">大額單筆交易（近 3 日）</h2>
           <p className="panel-desc panel-desc-tight">
             {data.largeTransactions.rangeLabel} · 僅統計<strong>交易成功</strong>消費 · 單筆 ≥{" "}
-            {formatHkd(thresholds.largeTxnMinHkd)} · Visa / Mastercard / 銀聯
+            {formatHkd(thresholds.largeTxnMinHkd)} · 卡歸屬地「外地／境外卡」· Visa / Mastercard / 銀聯
           </p>
         </div>
         {largeTxns.length === 0 ? (

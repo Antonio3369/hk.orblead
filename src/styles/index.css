@@ -898,6 +898,31 @@ body {
   padding-bottom: 14px;
 }
 
+.workbench-narrative {
+  padding-top: 18px;
+  padding-bottom: 18px;
+  margin-bottom: 4px;
+}
+
+.workbench-narrative-greeting {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.workbench-narrative-opening,
+.workbench-narrative-continuation {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.workbench-narrative-continuation {
+  margin-top: 8px;
+}
+
 .dashboard-overview {
   padding-top: 18px;
   padding-bottom: 18px;

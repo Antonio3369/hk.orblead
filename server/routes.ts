@@ -71,7 +71,7 @@ import {
   repairAckAlertsFromFollowUps,
   uploadDir,
 } from "./followUp.js";
-import { formatImportResultMessage, importFailureEventsOnly, importTransactionFile } from "./importService.js";
+import { formatImportResultMessage, importFailureEventsOnly, importTransactionFile, runImportPostProcessing } from "./importService.js";
 import { validateUploadFile } from "./fileValidator.js";
 import { logAction } from "./audit.js";
 import { getMerchantLimitProfile } from "./merchantLimitProfile.js";
@@ -102,6 +102,17 @@ function parseSalesListSort(raw: unknown): SalesListSortKey {
     return key;
   }
   return "lastMonthAmount";
+}
+
+function deferImportPostProcessing(touchedMerchantIds: number[] | undefined) {
+  if (!touchedMerchantIds?.length) return;
+  setImmediate(() => {
+    try {
+      runImportPostProcessing(touchedMerchantIds);
+    } catch (err) {
+      console.error("import post-processing error:", err);
+    }
+  });
 }
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -274,6 +285,7 @@ apiRouter.post("/import/auto", importKeyMiddleware, upload.single("file"), (req,
 
     const skipped = result.skipped ?? 0;
     const failuresSkipped = result.failuresSkipped ?? 0;
+    const cardRegionFilled = result.cardRegionFilled ?? 0;
 
     res.json({
       message: formatImportResultMessage({
@@ -281,15 +293,18 @@ apiRouter.post("/import/auto", importKeyMiddleware, upload.single("file"), (req,
         skipped,
         failuresImported: result.failuresImported ?? 0,
         failuresSkipped,
+        cardRegionFilled,
         failuresOnly: false,
       }),
       imported: result.imported,
       skipped,
+      cardRegionFilled,
       failuresImported: result.failuresImported ?? 0,
       failuresSkipped,
       errors: result.errors,
       batchId: result.batchId,
     });
+    deferImportPostProcessing(result.touchedMerchantIds);
   } catch (err) {
     console.error("import/auto error:", err);
     res.status(500).json({
@@ -315,7 +330,14 @@ apiRouter.get("/merchants/mastercard-ranking", (req, res) => {
 });
 
 apiRouter.get("/overseas-cards/overview", (req, res) => {
-  res.json(getOverseasCardOverview(req.user!.id, req.user!.role));
+  try {
+    res.json(getOverseasCardOverview(req.user!.id, req.user!.role));
+  } catch (err) {
+    console.error("overseas-cards/overview error:", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "境外卡數據載入失敗",
+    });
+  }
 });
 
 apiRouter.get("/merchants/:id", (req, res) => {
@@ -796,6 +818,7 @@ apiRouter.post(
 
       const skipped = (result as { skipped?: number }).skipped ?? 0;
       const failuresSkipped = (result as { failuresSkipped?: number }).failuresSkipped ?? 0;
+      const cardRegionFilled = (result as { cardRegionFilled?: number }).cardRegionFilled ?? 0;
 
       res.json({
         message: formatImportResultMessage({
@@ -803,15 +826,20 @@ apiRouter.post(
           skipped,
           failuresImported: result.failuresImported ?? 0,
           failuresSkipped,
+          cardRegionFilled,
           failuresOnly,
         }),
         imported: result.imported,
         skipped,
+        cardRegionFilled,
         failuresImported: result.failuresImported ?? 0,
         failuresSkipped,
         errors: result.errors,
         batchId: result.batchId,
       });
+      deferImportPostProcessing(
+        failuresOnly ? undefined : (result as { touchedMerchantIds?: number[] }).touchedMerchantIds
+      );
     } catch (err) {
       console.error("import error:", err);
       res.status(500).json({

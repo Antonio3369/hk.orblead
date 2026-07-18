@@ -13,11 +13,10 @@ const root = path.join(__dirname, "..");
 
 process.env.DATABASE_PATH = path.join(root, "data", "sandbox-live.db");
 
-const SAM_XLSX =
-  process.env.SAM_XLSX ?? "/Users/Eric/Desktop/agent/数据/sam202512.xlsx";
+const SAM_XLSX = process.env.SAM_XLSX ?? path.join(root, "numbers", "sam202512.xlsx");
 const ORG_XLSX =
   process.env.ORG_XLSX ??
-  "/Users/Eric/Desktop/agent/数据/54516685_機构交易數據報表_2026-07-01.xlsx";
+  path.join(root, "numbers", "54516685_機构交易數據報表_2026-07-08.xlsx");
 const DB_PATH = process.env.DATABASE_PATH;
 
 for (const ext of ["", "-wal", "-shm"]) {
@@ -48,13 +47,24 @@ async function main() {
   await seedUser("sam202512", "sales123", "Sam", "leader");
   await seedUser("Winnie202512", "sales123", "Winnie", "sales");
 
-  if (!fs.existsSync(SAM_XLSX)) {
-    console.error(`缺少: ${SAM_XLSX}`);
+  const seedXlsx = fs.existsSync(SAM_XLSX) ? SAM_XLSX : ORG_XLSX;
+  if (!fs.existsSync(seedXlsx)) {
+    console.error(`缺少种子数据（sam202512.xlsx 或机构报表）:\n  ${SAM_XLSX}\n  ${ORG_XLSX}`);
     process.exit(1);
   }
+  if (seedXlsx === ORG_XLSX) {
+    console.log(`未找到 ${path.basename(SAM_XLSX)}，改用机构报表种子: ${path.basename(ORG_XLSX)}`);
+  }
 
-  const buf = fs.readFileSync(SAM_XLSX);
-  importTransactionFile(buf, "sam202512.xlsx", 1, "append", "sam202512");
+  const buf = fs.readFileSync(seedXlsx);
+  const seedName = path.basename(seedXlsx);
+  importTransactionFile(
+    buf,
+    seedName,
+    1,
+    "append",
+    seedXlsx === SAM_XLSX ? "sam202512" : undefined
+  );
 
   const samId = (db.prepare(`SELECT id FROM users WHERE username = 'sam202512'`).get() as { id: number })
     .id;

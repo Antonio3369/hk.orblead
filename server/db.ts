@@ -135,6 +135,7 @@ export function initSchema() {
   migrateColumn("transactions", "payment_channel", "TEXT");
   migrateColumn("transactions", "order_no", "TEXT");
   migrateColumn("transactions", "card_no", "TEXT");
+  migrateColumn("transactions", "card_region", "TEXT");
   migrateTransactionOrderNo();
   migrateColumn("users", "email", "TEXT");
   migrateMerchantLimitsTables();

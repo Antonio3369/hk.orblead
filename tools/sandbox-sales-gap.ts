@@ -14,11 +14,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 const worker = path.join(__dirname, "sandbox-sales-gap-worker.ts");
 
-const SAM_XLSX =
-  process.env.SAM_XLSX ?? "/Users/Eric/Desktop/agent/数据/sam202512.xlsx";
+const SAM_XLSX = process.env.SAM_XLSX ?? path.join(root, "numbers", "sam202512.xlsx");
 const ORG_XLSX =
   process.env.ORG_XLSX ??
-  "/Users/Eric/Desktop/agent/数据/54516685_機构交易數據報表_2026-07-01.xlsx";
+  path.join(root, "numbers", "54516685_機构交易數據報表_2026-07-08.xlsx");
 
 for (const p of [SAM_XLSX, ORG_XLSX]) {
   if (!fs.existsSync(p)) {

@@ -1,25 +1,39 @@
 ---
-description: sales-data-agent 生产发版流程（Mac + OrcaTerm）
+description: sales-data-agent 生产发版流程（Mac → 腾讯云）
 alwaysApply: true
 ---
 
 # 发版与环境
 
-- Mac 开发：`/Users/Eric/projects/sales-data-agent`
-- 生产服务器：`/opt/sales-data-agent`（OrcaTerm），`http://43.136.25.181:3080`
-- 不用 Trae 改服务器；看板 `.env` 与 `tools/alipay/` 无关
+- Mac：`/Users/xin/projects/hk.orblead`
+- 生产：`/opt/sales-data-agent`，https://hk.orblead.com · `43.136.25.181:3080`
+- SSH 别名：`sales-cloud`
+- 不用 Trae 改服务器；看板与 `tools/alipay/` 无关
 
-## 只改前端
+## 发版门禁（必须遵守）
 
-1. Mac：`npm run pack:frontend` → `release/sales-dist-*.tgz`
-2. 上传到服务器
-3. OrcaTerm：`sudo tar xzf ... -C /opt/sales-data-agent` 然后 **`sudo docker compose up -d --build`**
-4. 不要用 `docker compose restart`（不会更新镜像内 dist）
+1. **未经用户明确说「部署」**（或同等措辞：上线 / 发版到生产），**禁止**执行 `npm run deploy`、`push-and-deploy.sh`、SSH 改生产、改 Nginx 生产配置等。
+2. 「可以了」「好啊」「发版吧」若语境是功能确认而非明确要求上生产，先确认；**仅当用户说「部署」时直接部署**。
+3. **部署前**须完成（并简要回报结果）：
+   - **沙箱验证**：`npm run sandbox:open` 或对应用户场景做关键路径点验
+   - **自检冲突与漏洞**：至少 `npm run typecheck`；有依赖变更时 `npm audit --omit=dev`（或说明跳过原因）；改动面大时扫一眼相关 diff / 易冲突点
+4. 部署完成后回报：命令结果、探活、用户需强制刷新等
 
-## 全量/后端
+## 推荐：一键发版（仅门禁通过后）
 
-1. Mac：`npm run pack:deploy`
-2. OrcaTerm：解压前 `cp .env /tmp/.env.backup`，解压后恢复 `.env`，再 `sudo docker compose up -d --build`
+```bash
+npm run deploy
+# 或 ./deploy/push-and-deploy.sh
+```
+
+本地 build → rsync 到 `/tmp` → sudo 覆盖 `/opt/sales-data-agent`（不覆盖 `.env`）→ `docker compose up -d --build`。  
+`SKIP_BUILD=1` 可跳过本地 build。
+
+## 备用：tgz + OrcaTerm
+
+- 前端：`npm run pack:frontend` → 上传 → 解压 → `sudo docker compose up -d --build`
+- 全量：`npm run pack:deploy` → 解压前备份 `.env` → 解压后恢复 → `--build`
+- 不要用 `docker compose restart`（不会更新镜像内 dist）
 
 ## 细节
 

@@ -384,7 +384,9 @@ export interface OverseasCardMonthRankRow {
   salesUserId: number | null;
   salesName: string | null;
   totalAmount: number;
-  merchantLastMonthTotal: number;
+  merchantMonthTotal: number;
+  /** @deprecated 旧字段名，与 merchantMonthTotal 相同 */
+  merchantLastMonthTotal?: number;
   txnCount: number;
   sharePercent: number;
 }
@@ -403,7 +405,7 @@ export interface OverseasCardRepeatGroup {
   merchantCode: string | null;
   salesUserId: number | null;
   salesName: string | null;
-  scheme: "visa" | "mastercard";
+  scheme: "visa" | "mastercard" | "unionpay";
   cardNo: string;
   hitCount: number;
   bandAmount: number;
@@ -426,13 +428,15 @@ export interface OverseasCardLargeTxnRow {
 }
 
 export interface OverseasCardOverview {
-  lastMonthRank: {
+  currentMonthRank?: {
     rankMonth: string;
     rankLimit: number;
     scopeNote: string;
     orgTotal: number;
     merchants: OverseasCardMonthRankRow[];
   };
+  /** @deprecated 旧字段名 */
+  lastMonthRank?: OverseasCardOverview["currentMonthRank"];
   repeatCardHits: {
     rangeLabel: string;
     start: string;

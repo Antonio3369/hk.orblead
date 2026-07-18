@@ -4,17 +4,18 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { getDashboardMonthlyStats } from "../server/analytics.js";
 import { initSchema, db } from "../server/db.js";
 import { importTransactionFile } from "../server/importService.js";
 import { syncMerchantSalesAssignment } from "../server/userSync.js";
 
 const scenario = process.argv[2] ?? "A";
-const SAM_XLSX =
-  process.env.SAM_XLSX ?? "/Users/Eric/Desktop/agent/数据/sam202512.xlsx";
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const SAM_XLSX = process.env.SAM_XLSX ?? path.join(root, "numbers", "sam202512.xlsx");
 const ORG_XLSX =
   process.env.ORG_XLSX ??
-  "/Users/Eric/Desktop/agent/数据/54516685_機构交易數據報表_2026-07-01.xlsx";
+  path.join(root, "numbers", "54516685_機构交易數據報表_2026-07-08.xlsx");
 
 function fmt(n: number): string {
   return n.toLocaleString("zh-HK", { maximumFractionDigits: 2 });

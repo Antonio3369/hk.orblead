@@ -40,3 +40,10 @@ alwaysApply: true
 - 环境变量见 `.env.example`（`QQ_IMAP_*`、`EMAIL_IMPORT_NOTIFY_TO` 等）。
 - 服务器 cron：`bash scripts/install-email-import-cron.sh`（每天 10:25 HKT）。
 - 手动试跑：`docker compose exec app node dist-server/emailImport/run.js`
+
+## 导入性能（2026-07-18 定稿）
+
+- **append 重复导入**（补 `卡歸屬地`）：应用 **批量查单 + 批量补列**；勿逐行全库重算预警。
+- 22KB 级机构日报在生产 ~88 万笔库上应 **数秒内** 完成；若整站卡住，查是否旧版或未用 append。
+- **勿**为导入慢盲目升级腾讯云带宽/CPU（瓶颈在 Node 单线程与 SQL 次数）。
+- 发版后验证：admin **追加导入** 一份近 3 日机构报表 → 看板仍可访问；提示含「重复跳过 / 补写卡歸屬地」。

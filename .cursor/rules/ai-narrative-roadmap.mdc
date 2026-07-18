@@ -1,0 +1,29 @@
+---
+description: AI 叙事路线图命名（勿与历史 Phase 1 混淆）
+alwaysApply: true
+---
+
+# AI 叙事路线图（环比起承）
+
+用户说 **「Phase 1 / Phase 2 / Phase 3」** 且语境是 AI / 工作台叙事 / 简报 / 预警解读时，指的是下面这套，**不是**纪要里其它已完成的「Phase 1」。
+
+## 名称对照（易混）
+
+| 说法 | 含义 | 状态 |
+|------|------|------|
+| **AI 叙事 Phase 1 / 工作台环比起承** | 称呼→起→承，无 LLM；UI 不展示起/承字 | ✅ 2026-07-18 已发版 |
+| **AI 叙事 Phase 2** | Sales/Leader AI 简报 | 未做 |
+| **AI 叙事 Phase 3** | 预警 AI 解读 | 未做 |
+| 管理者洞察看板 Phase 1 | 飞虎队/团队/销售详情 insight | 已发版，勿再当待开发 |
+| 导入商户匹配 Phase 1 | merchant_code 优先 | 已发版，勿再当待开发 |
+
+用户只说「Phase 1」且未指明时：先问是 **环比起承** 还是 **洞察/导入**；默认若刚在聊 AI 路线，则指 **环比起承**。
+
+## Phase 1 定稿要点
+
+- 挂载：工作台页头下、首图/内容最上（`WorkbenchNarrative`）
+- 文案：`buildWorkbenchNarrative`（`src/utils/workbenchNarrative.ts`），繁体；无 LLM
+- UI **不展示「起／承」标签**，只显示称呼与正文两段
+- 称呼：`displayName`；起：上月 vs 上上月 + 总额环比 + 日均环比（显式月份）；承：结构句；Leader 承尾半句 = 团队未跟进预警偏多的销售名
+- 缺数据：保留称呼；起改说明句；承不写
+- 详情见 `docs/立得香港看板-AI助手交接指南.md` §5.5

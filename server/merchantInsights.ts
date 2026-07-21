@@ -1,4 +1,5 @@
 import { db } from "./db.js";
+import { calcDailyAvgChangePercent } from "./analytics.js";
 import { getDailyDeclineThreshold } from "./insightRules.js";
 
 export type MerchantInsightStatus = "newSilent" | "declining" | "rising" | "flat" | "inactive";
@@ -171,13 +172,13 @@ export function listMerchantInsightsForSales(salesUserId: number): MerchantInsig
     const mtdAmount = Math.round(r.mtdAmount * 100) / 100;
     let dailyAvgChangePercent: number | null = null;
 
-    if (mtd.days > 0 && lastMonthDays > 0 && lastMonthAmount !== 0) {
-      const currentDailyAvg = mtdAmount / mtd.days;
-      const lastMonthDailyAvg = lastMonthAmount / lastMonthDays;
-      if (lastMonthDailyAvg !== 0) {
-        dailyAvgChangePercent =
-          Math.round(((currentDailyAvg - lastMonthDailyAvg) / lastMonthDailyAvg) * 1000) / 10;
-      }
+    if (mtd.days > 0 && lastMonthDays > 0) {
+      dailyAvgChangePercent = calcDailyAvgChangePercent(
+        mtdAmount,
+        mtd.days,
+        lastMonthAmount,
+        lastMonthDays
+      );
     }
 
     return {

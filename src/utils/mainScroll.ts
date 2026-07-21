@@ -8,15 +8,17 @@ export function getMainScrollTop(): number {
   return getMainScrollEl()?.scrollTop ?? window.scrollY;
 }
 
-export function scrollMainTo(top: number) {
+export function scrollMainTo(top: number, options?: { smooth?: boolean }) {
+  const y = Math.max(0, Math.round(top));
+  const behavior = options?.smooth ? "smooth" : "auto";
   const el = getMainScrollEl();
   if (el) {
-    el.scrollTop = top;
+    el.scrollTo({ top: y, behavior });
     return;
   }
-  window.scrollTo(0, top);
+  window.scrollTo({ top: y, behavior });
 }
 
-export function scrollMainToTop() {
-  scrollMainTo(0);
+export function scrollMainToTop(options?: { smooth?: boolean }) {
+  scrollMainTo(0, options);
 }

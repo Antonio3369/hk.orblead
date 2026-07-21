@@ -20,7 +20,8 @@ import { useAuth } from "@/context/AuthContext";
 import { BRAND } from "@/config/branding";
 import { LEADER_PERSONAL_SCOPE_HINT, merchantsNavLabel } from "@/config/navigation";
 import type { OpenMerchantsParams } from "@/utils/openMerchants";
-import { buildWorkbenchNarrative } from "@/utils/workbenchNarrative";
+import { buildWorkbenchNarrative, resolveWorkbenchCurrentMonth } from "@/utils/workbenchNarrative";
+import { scrollMainToTop } from "@/utils/mainScroll";
 
 interface DashboardPageProps {
   onOpenAlerts: () => void;
@@ -84,6 +85,10 @@ export function DashboardPage({
       .catch(() => setTeamSales([]));
   }, [user?.role]);
 
+  useEffect(() => {
+    scrollMainToTop();
+  }, []);
+
   const isAdmin = user?.role === "admin";
   const isLeader = user?.role === "leader";
   const isPersonalDashboard = user?.role === "sales" || isLeader;
@@ -92,22 +97,32 @@ export function DashboardPage({
   const narrative = useMemo(() => {
     if (!user) return null;
     const role = user.role === "admin" ? "admin" : user.role === "leader" ? "leader" : "sales";
-    const monthCompare = isAdmin
-      ? overview.adminCharts?.monthCompare
-      : overview.personalCharts?.monthCompare;
-    const buckets = isAdmin
-      ? overview.adminCharts?.merchantInsight.buckets
-      : overview.personalCharts?.merchantInsight.buckets;
+    const charts = isAdmin ? overview.adminCharts : overview.personalCharts;
+    const monthCompare = charts?.monthCompare;
+    const buckets = charts?.merchantInsight?.buckets;
     return buildWorkbenchNarrative({
       displayName: user.displayName,
       role,
       monthCompare,
+      currentMonth: resolveWorkbenchCurrentMonth(
+        overview.homeInsight,
+        charts,
+        monthCompare
+      ),
       buckets,
       teamUnread: isLeader
         ? teamSales.map((s) => ({ displayName: s.displayName, unreadAlerts: s.unreadAlerts }))
         : undefined,
     });
-  }, [user, isAdmin, isLeader, overview.adminCharts, overview.personalCharts, teamSales]);
+  }, [
+    user,
+    isAdmin,
+    isLeader,
+    overview.adminCharts,
+    overview.personalCharts,
+    overview.homeInsight,
+    teamSales,
+  ]);
 
   return (
     <AppShell
@@ -150,9 +165,18 @@ export function DashboardPage({
         </>
       ) : isPersonalDashboard ? (
         <>
-          {narrative ? <WorkbenchNarrative parts={narrative} /> : null}
+          {narrative ? (
+            <WorkbenchNarrative parts={narrative} className="workbench-narrative--above-hero" />
+          ) : null}
           {overview.homeInsight ? (
             <section className="panel dashboard-hero">
+              {narrative ? (
+                <WorkbenchNarrative
+                  parts={narrative}
+                  embedded
+                  className="workbench-narrative--in-hero"
+                />
+              ) : null}
               <div className="dashboard-hero-head">
                 <div>
                   <p className="dashboard-hero-kicker">

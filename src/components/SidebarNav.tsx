@@ -91,7 +91,10 @@ export function SidebarNav({ items, activeNav, onNavigate, onLogout, onClose }: 
             </span>
           </div>
         </div>
-        <button type="button" className="sidebar-logout-btn" onClick={onLogout}>
+        <button type="button" className="sidebar-logout-btn" onClick={() => {
+          onLogout();
+          onClose?.();
+        }}>
           登出
         </button>
       </div>

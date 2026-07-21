@@ -5,6 +5,7 @@ import type {
   MerchantSummary,
   SalesHomeInsightSnapshot,
 } from "@/api/client";
+import { calcDailyAvgChangePercent } from "@/utils/dailyAvgChange";
 
 type InsightMerchant = Pick<
   MerchantSummary,
@@ -117,11 +118,13 @@ export function buildHomeInsightFromMerchants(
   const lastMonthDays = daysInPreviousCalendarMonth();
 
   let dailyAvgChangePercent: number | null = null;
-  if (mtdDays > 0 && lastMonthDays > 0 && lastMonthAmount > 0) {
-    const currentDailyAvg = mtdAmount / mtdDays;
-    const lastMonthDailyAvg = lastMonthAmount / lastMonthDays;
-    dailyAvgChangePercent =
-      Math.round(((currentDailyAvg - lastMonthDailyAvg) / lastMonthDailyAvg) * 1000) / 10;
+  if (mtdDays > 0 && lastMonthDays > 0) {
+    dailyAvgChangePercent = calcDailyAvgChangePercent(
+      mtdAmount,
+      mtdDays,
+      lastMonthAmount,
+      lastMonthDays
+    );
   }
 
   return {

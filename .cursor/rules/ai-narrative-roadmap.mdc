@@ -21,9 +21,10 @@ alwaysApply: true
 
 ## Phase 1 定稿要点
 
-- 挂载：工作台页头下、首图/内容最上（`WorkbenchNarrative`）
+- 挂载：工作台页头下、首图/内容最上（`WorkbenchNarrative`）；**手机**在 Hero 卡片内（`workbench-narrative--in-hero`）
 - 文案：`buildWorkbenchNarrative`（`src/utils/workbenchNarrative.ts`），繁体；无 LLM
-- UI **不展示「起／承」标签**，只显示称呼与正文两段
-- 称呼：`displayName`；起：上月 vs 上上月 + 总额环比 + 日均环比（显式月份）；承：结构句；Leader 承尾半句 = 团队未跟进预警偏多的销售名
+- UI **不展示「起／承」标签**，只显示称呼与正文两段；正文色 `--racing-green`（`#004225`）
+- 称呼：`displayName`；起：上月 vs 上上月 + 总额环比 + 日均环比（显式月份）+ **本月 MTD**；承：结构句；Leader 承尾半句 = 团队未跟进预警偏多的销售名
 - 缺数据：保留称呼；起改说明句；承不写
+- **2026-07-22 已发版**（手机 hero、本月 MTD、英绿文案）
 - 详情见 `docs/立得香港看板-AI助手交接指南.md` §5.5

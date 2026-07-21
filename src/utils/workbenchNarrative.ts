@@ -1,8 +1,12 @@
 import {
   formatChangePercent,
+  type AdminDashboardCharts,
   type AdminMerchantInsightBucket,
   type AdminMonthCompare,
+  type PersonalDashboardCharts,
+  type SalesHomeInsightSnapshot,
 } from "@/api/client";
+import { calcDailyAvgChangePercent } from "@/utils/dailyAvgChange";
 
 export type NarrativeRole = "admin" | "leader" | "sales";
 
@@ -11,10 +15,18 @@ export interface TeamUnreadHint {
   unreadAlerts: number;
 }
 
+export interface WorkbenchCurrentMonthSnapshot {
+  periodLabel: string;
+  totalAmount: number;
+  dailyAvgChangePercent: number | null;
+  lastMonthLabel: string;
+}
+
 export interface WorkbenchNarrativeInput {
   displayName: string | null | undefined;
   role: NarrativeRole;
   monthCompare: AdminMonthCompare | null | undefined;
+  currentMonth: WorkbenchCurrentMonthSnapshot | null | undefined;
   buckets: AdminMerchantInsightBucket[] | null | undefined;
   teamUnread?: TeamUnreadHint[];
 }
@@ -24,6 +36,11 @@ export interface WorkbenchNarrativeParts {
   opening: string;
   continuation: string | null;
 }
+
+type DashboardChartsSlice = Pick<
+  AdminDashboardCharts,
+  "monthlyTrend" | "monthCompare" | "merchantInsight"
+>;
 
 function formatAmountWan(amount: number): string {
   const wan = amount / 10000;
@@ -38,12 +55,79 @@ function formatSignedPercent(value: number | null): string {
   return `${sign}${formatChangePercent(value)}%`;
 }
 
+function parseMtdEndDay(label: string): number | null {
+  const match = label.match(/(\d+)日\s*$/);
+  return match ? Number(match[1]) : null;
+}
+
+/** 從工作台圖表 / Hero 摘要解析本月 MTD，供敘事「起」使用。 */
+export function resolveWorkbenchCurrentMonth(
+  homeInsight: SalesHomeInsightSnapshot | undefined,
+  charts: DashboardChartsSlice | PersonalDashboardCharts | undefined,
+  monthCompare: AdminMonthCompare | null | undefined
+): WorkbenchCurrentMonthSnapshot | null {
+  const lastMonthLabel = monthCompare?.lastMonth?.chartLabel ?? "上月";
+
+  if (homeInsight) {
+    return {
+      periodLabel: homeInsight.mtdLabel,
+      totalAmount: homeInsight.mtdAmount,
+      dailyAvgChangePercent: homeInsight.dailyAvgChangePercent,
+      lastMonthLabel,
+    };
+  }
+
+  const current = charts?.monthlyTrend?.find((m) => m.isCurrent);
+  if (!current) return null;
+
+  const periodLabel = charts?.merchantInsight?.mtdLabel ?? current.label;
+  const last = monthCompare?.lastMonth;
+  const mtdDays = parseMtdEndDay(periodLabel);
+  const dailyAvgChangePercent =
+    last && mtdDays
+      ? calcDailyAvgChangePercent(current.totalAmount, mtdDays, last.totalAmount, last.days)
+      : null;
+
+  return {
+    periodLabel,
+    totalAmount: current.totalAmount,
+    dailyAvgChangePercent,
+    lastMonthLabel,
+  };
+}
+
 function bucketCount(
   buckets: AdminMerchantInsightBucket[] | null | undefined,
   key: AdminMerchantInsightBucket["key"]
 ): { count: number; percent: number } {
   const row = buckets?.find((b) => b.key === key);
   return { count: row?.count ?? 0, percent: row?.percent ?? 0 };
+}
+
+function narrativeSubject(role: NarrativeRole): string {
+  return role === "admin" ? "全機構交易額" : "你名下交易額";
+}
+
+function buildMonthCompareOpening(
+  role: NarrativeRole,
+  compare: AdminMonthCompare
+): string {
+  const last = compare.lastMonth;
+  const prev = compare.previousMonth;
+  const subject = narrativeSubject(role);
+  return `${last.label}${subject} ${formatAmountWan(last.totalAmount)}，較 ${prev.label} ${formatSignedPercent(compare.amountChangePercent)}；日均 ${formatSignedPercent(compare.dailyAvgChangePercent)}。`;
+}
+
+function buildCurrentMonthOpening(
+  role: NarrativeRole,
+  currentMonth: WorkbenchCurrentMonthSnapshot
+): string {
+  const subject = narrativeSubject(role);
+  const dailyPart =
+    currentMonth.dailyAvgChangePercent === null
+      ? ""
+      : `，日均較 ${currentMonth.lastMonthLabel} ${formatSignedPercent(currentMonth.dailyAvgChangePercent)}`;
+  return `${currentMonth.periodLabel}${subject} ${formatAmountWan(currentMonth.totalAmount)}${dailyPart}。`;
 }
 
 function buildContinuation(
@@ -96,17 +180,37 @@ function buildContinuation(
   return `${stem}；團隊未跟進預警偏多的是 ${names}。`;
 }
 
+function hasMonthCompareData(compare: AdminMonthCompare | null | undefined): compare is AdminMonthCompare {
+  return !!compare && (compare.lastMonth.totalAmount > 0 || compare.previousMonth.totalAmount > 0);
+}
+
+function hasCurrentMonthData(currentMonth: WorkbenchCurrentMonthSnapshot | null | undefined): currentMonth is WorkbenchCurrentMonthSnapshot {
+  if (!currentMonth) return false;
+  if (currentMonth.totalAmount > 0) return true;
+  return !currentMonth.periodLabel.includes("暫無本月數據");
+}
+
 /** 工作台環比「稱呼 → 起 → 承」文案（無 LLM）。 */
 export function buildWorkbenchNarrative(input: WorkbenchNarrativeInput): WorkbenchNarrativeParts {
   const name = input.displayName?.trim();
   const greeting = name ? `${name}，您好。` : "您好。";
 
   const compare = input.monthCompare;
-  const hasCompareMonths =
-    !!compare &&
-    (compare.lastMonth.totalAmount > 0 || compare.previousMonth.totalAmount > 0);
+  const hasCompareMonths = hasMonthCompareData(compare);
+  const currentMonth = hasCurrentMonthData(input.currentMonth) ? input.currentMonth : null;
 
-  if (!hasCompareMonths) {
+  const openingParts: string[] = [];
+  if (hasCompareMonths) {
+    openingParts.push(buildMonthCompareOpening(input.role, compare));
+  }
+  if (currentMonth) {
+    openingParts.push(buildCurrentMonthOpening(input.role, currentMonth));
+  }
+  if (!hasCompareMonths && currentMonth) {
+    openingParts.push("上月與上上月尚無完整對比數據，補齊後會自動更新環比。");
+  }
+
+  if (openingParts.length === 0) {
     return {
       greeting,
       opening: "尚無完整對比月數據，暫時無法給出環比起承；有完整上月與上上月後會自動更新。",
@@ -114,21 +218,18 @@ export function buildWorkbenchNarrative(input: WorkbenchNarrativeInput): Workben
     };
   }
 
-  const last = compare.lastMonth;
-  const prev = compare.previousMonth;
-  const subject =
-    input.role === "admin" ? "全機構交易額" : "你名下交易額";
+  const structureSignal = hasCompareMonths
+    ? compare.amountChangePercent
+    : currentMonth?.dailyAvgChangePercent ?? null;
 
-  const opening = `${last.label}${subject} ${formatAmountWan(last.totalAmount)}，較 ${prev.label} ${formatSignedPercent(compare.amountChangePercent)}；日均 ${formatSignedPercent(compare.dailyAvgChangePercent)}。`;
+  const hasBuckets = (input.buckets?.reduce((sum, b) => sum + b.count, 0) ?? 0) > 0;
+  const continuation = hasBuckets
+    ? buildContinuation(input.role, input.buckets, input.teamUnread, structureSignal)
+    : null;
 
   return {
     greeting,
-    opening,
-    continuation: buildContinuation(
-      input.role,
-      input.buckets,
-      input.teamUnread,
-      compare.amountChangePercent
-    ),
+    opening: openingParts.join(""),
+    continuation,
   };
 }

@@ -109,6 +109,39 @@ function calcChangePercent(current: number, baseline: number): number | null {
   return 0;
 }
 
+/** 日均環比：上月 < 100 HKD 或为负时，默认按 10 HKD 作底数，避免 ±千万 % */
+export const MIN_LAST_MONTH_AMOUNT_FOR_DAILY_COMPARE = 100;
+export const DEFAULT_LAST_MONTH_BASELINE_HKD = 10;
+export const MAX_DAILY_AVG_CHANGE_PERCENT = 999.9;
+
+export function effectiveLastMonthAmountForDailyCompare(lastMonthAmount: number): number {
+  if (lastMonthAmount < MIN_LAST_MONTH_AMOUNT_FOR_DAILY_COMPARE) {
+    return DEFAULT_LAST_MONTH_BASELINE_HKD;
+  }
+  return lastMonthAmount;
+}
+
+export function calcDailyAvgChangePercent(
+  mtdAmount: number,
+  mtdDays: number,
+  lastMonthAmount: number,
+  lastMonthDays: number
+): number | null {
+  if (mtdDays <= 0 || lastMonthDays <= 0) return null;
+
+  const baselineAmount = effectiveLastMonthAmountForDailyCompare(lastMonthAmount);
+  const currentDailyAvg = mtdAmount / mtdDays;
+  const lastMonthDailyAvg = baselineAmount / lastMonthDays;
+
+  const raw = Math.round(((currentDailyAvg - lastMonthDailyAvg) / lastMonthDailyAvg) * 1000) / 10;
+  if (!Number.isFinite(raw)) return null;
+
+  return Math.max(
+    -MAX_DAILY_AVG_CHANGE_PERCENT,
+    Math.min(MAX_DAILY_AVG_CHANGE_PERCENT, raw)
+  );
+}
+
 function getDayPeriodChange(merchantId: number) {
   const today = startOfDay(new Date());
   const yesterday = new Date(today);
@@ -562,13 +595,13 @@ export function listMerchantsForUser(userId: number, role: string): MerchantSumm
     const mtdScanAmount = Math.round(r.mtdScanAmount * 100) / 100;
     let dailyAvgChangePercent: number | null = null;
 
-    if (mtd.days > 0 && lastMonthDays > 0 && lastMonthAmount !== 0) {
-      const currentDailyAvg = mtdAmount / mtd.days;
-      const lastMonthDailyAvg = lastMonthAmount / lastMonthDays;
-      if (lastMonthDailyAvg !== 0) {
-        dailyAvgChangePercent =
-          Math.round(((currentDailyAvg - lastMonthDailyAvg) / lastMonthDailyAvg) * 1000) / 10;
-      }
+    if (mtd.days > 0 && lastMonthDays > 0) {
+      dailyAvgChangePercent = calcDailyAvgChangePercent(
+        mtdAmount,
+        mtd.days,
+        lastMonthAmount,
+        lastMonthDays
+      );
     }
 
     return {
@@ -613,11 +646,13 @@ export function getDashboardHomeInsight(userId: number, role: string): SalesHome
   const lastMonthDays = daysInPreviousCalendarMonth();
 
   let dailyAvgChangePercent: number | null = null;
-  if (mtd.days > 0 && lastMonthDays > 0 && lastMonthAmount > 0) {
-    const currentDailyAvg = mtdAmount / mtd.days;
-    const lastMonthDailyAvg = lastMonthAmount / lastMonthDays;
-    dailyAvgChangePercent =
-      Math.round(((currentDailyAvg - lastMonthDailyAvg) / lastMonthDailyAvg) * 1000) / 10;
+  if (mtd.days > 0 && lastMonthDays > 0) {
+    dailyAvgChangePercent = calcDailyAvgChangePercent(
+      mtdAmount,
+      mtd.days,
+      lastMonthAmount,
+      lastMonthDays
+    );
   }
 
   return {

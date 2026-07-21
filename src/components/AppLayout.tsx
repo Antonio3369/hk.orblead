@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { ScrollToTopButton } from "@/components/ScrollToTopButton";
 import { SidebarNav } from "@/components/SidebarNav";
 import { SiteLegalFooter } from "@/components/SiteLegalFooter";
 import type { NavKey } from "@/config/navigation";
@@ -31,6 +32,7 @@ export function AppLayout({ activeNav, onNavigate, children }: AppLayoutProps) {
   if (!user) return <>{children}</>;
 
   const items = navItemsForRole(user.role);
+  const scrollResetKey = activeNav ?? "none";
 
   return (
     <div className="app-layout">
@@ -56,6 +58,14 @@ export function AppLayout({ activeNav, onNavigate, children }: AppLayoutProps) {
       <main id="app-main" className="app-content">
         <button
           type="button"
+          className="app-mobile-logout"
+          aria-label="登出"
+          onClick={logout}
+        >
+          登出
+        </button>
+        <button
+          type="button"
           className="sidebar-toggle"
           aria-label={mobileOpen ? "關閉導航" : "開啟導航"}
           aria-expanded={mobileOpen}
@@ -67,6 +77,7 @@ export function AppLayout({ activeNav, onNavigate, children }: AppLayoutProps) {
         </button>
         <div className="app-content-body">{children}</div>
         <SiteLegalFooter className="site-legal-footer--shell" />
+        <ScrollToTopButton scrollResetKey={scrollResetKey} />
       </main>
     </div>
   );

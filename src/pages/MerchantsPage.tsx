@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, formatChangePercent, formatHkd, type MerchantListSortKey, type MerchantSummary, type TigerTeamSalesRow } from "@/api/client";
+import { dailyAvgBaselineHint } from "@/utils/dailyAvgChange";
 import { MerchantStatusTag } from "@/components/MerchantStatusTag";
 import { normalizeMerchantSummary, sortMerchantsForView } from "@/utils/merchantInsightView";
 import { PageLoader } from "@/components/PageLoader";
@@ -92,13 +93,18 @@ function sortMerchants(rows: MerchantSummary[], key: SortKey, dir: SortDir): Mer
   return sorted;
 }
 
-function DailyAvgChange({ value }: { value: number | null }) {
+function DailyAvgChange({ value, lastMonthAmount }: { value: number | null; lastMonthAmount?: number }) {
   if (value === null) {
     return <span className="muted">—</span>;
   }
   const up = value >= 0;
+  const baselineHint =
+    lastMonthAmount !== undefined ? dailyAvgBaselineHint(lastMonthAmount) : undefined;
   return (
-    <span className={`change-pill ${up ? "up" : "down"}`} title="本月日均 vs 上月日均">
+    <span
+      className={`change-pill ${up ? "up" : "down"}`}
+      title={baselineHint ?? "本月日均 vs 上月日均"}
+    >
       {up ? "↑ 上漲" : "↓ 下跌"} {value > 0 ? "+" : ""}
       {formatChangePercent(value)}%
     </span>
@@ -574,7 +580,7 @@ export function MerchantsPage({
                           {formatHkd(m.mtdAmount)}
                         </td>
                         <td data-label="日均環比">
-                          <DailyAvgChange value={m.dailyAvgChangePercent} />
+                          <DailyAvgChange value={m.dailyAvgChangePercent} lastMonthAmount={m.lastMonthAmount} />
                         </td>
                         {useInsightToolbar ? (
                           <td data-label="狀態">

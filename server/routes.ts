@@ -85,6 +85,15 @@ import {
 } from "./tigerTeam.js";
 import { getDailyDeclineThreshold, setDailyDeclineThreshold, getMastercardLifetimeWarnHkd, setMastercardLifetimeWarnHkd, getMastercardLifetimeAlertHkd, setMastercardLifetimeAlertHkd } from "./insightRules.js";
 import {
+  assertComplete,
+  createApplication,
+  getApplication,
+  listApplications,
+  updateApplication,
+} from "./merchantForm/store.js";
+import { applicationPdfName, normalizeApplicationPayload } from "./merchantForm/fields.js";
+import { renderApplicationPdf } from "./merchantForm/pdf.js";
+import {
   listMerchantInsightsForSales,
   sortTigerTeamRows,
   summarizeMerchantInsights,
@@ -1279,6 +1288,81 @@ apiRouter.post("/users/sync-merchants", adminOnly, (_req, res) => {
     unmatched,
     ...result,
   });
+});
+
+apiRouter.get("/merchant-applications", (req, res) => {
+  const user = req.user!;
+  res.json({ applications: listApplications(user.role, user.id) });
+});
+
+apiRouter.get("/merchant-applications/:id", (req, res) => {
+  const user = req.user!;
+  const row = getApplication(Number(req.params.id), user.role, user.id);
+  if (!row) {
+    res.status(404).json({ error: "找不到這份申請" });
+    return;
+  }
+  res.json({ application: row });
+});
+
+apiRouter.post("/merchant-applications", (req, res) => {
+  const user = req.user!;
+  const payload = normalizeApplicationPayload(req.body?.payload, user.displayName);
+  const error = assertComplete(payload);
+  if (error) {
+    res.status(400).json({ error });
+    return;
+  }
+  const application = createApplication(user.id, user.role, payload);
+  res.json({ application });
+});
+
+apiRouter.put("/merchant-applications/:id", (req, res) => {
+  const user = req.user!;
+  const existing = getApplication(Number(req.params.id), user.role, user.id);
+  const payload = normalizeApplicationPayload(req.body?.payload, existing?.payload.sales || user.displayName);
+  const error = assertComplete(payload);
+  if (error) {
+    res.status(400).json({ error });
+    return;
+  }
+  const result = updateApplication(Number(req.params.id), user.role, user.id, payload);
+  if (result === "missing") {
+    res.status(404).json({ error: "找不到這份申請" });
+    return;
+  }
+  if (result === "forbidden") {
+    res.status(403).json({ error: "只能修改自己提交的申請" });
+    return;
+  }
+  res.json({ application: result });
+});
+
+apiRouter.get("/merchant-applications/:id/pdf", async (req, res) => {
+  const user = req.user!;
+  const row = getApplication(Number(req.params.id), user.role, user.id);
+  if (!row) {
+    res.status(404).json({ error: "找不到這份申請" });
+    return;
+  }
+  const error = assertComplete(row.payload);
+  if (error) {
+    res.status(400).json({ error });
+    return;
+  }
+  try {
+    const pdf = await renderApplicationPdf(row.payload);
+    const filename = applicationPdfName(row.legalName);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="merchant-application.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}`
+    );
+    res.send(pdf);
+  } catch (err) {
+    console.error("merchant application pdf:", err);
+    res.status(500).json({ error: "PDF 生成失敗，請稍後再試" });
+  }
 });
 
 apiRouter.get("/audit/logs", adminOnly, (req, res) => {

@@ -11,12 +11,13 @@ export type NavKey =
   | "tigerTeam"
   | "leaderTeam"
   | "admin"
-  | "userCenter";
+  | "userCenter"
+  | "merchantApplications";
 
 export interface NavItem {
   key: NavKey;
   label: string;
-  icon: HomeEntryIconKind | "dashboard" | "admin" | "settings";
+  icon: HomeEntryIconKind | "dashboard" | "admin" | "settings" | "application";
   section: "main" | "footer";
   roles?: UserRole[];
 }
@@ -26,6 +27,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "tigerTeam", label: "飛虎隊", icon: "tiger", section: "main", roles: ["admin"] },
   { key: "leaderTeam", label: "我的團隊", icon: "team", section: "main", roles: ["leader"] },
   { key: "merchants", label: "商戶列表", icon: "merchants", section: "main" },
+  { key: "merchantApplications", label: "商戶申請表", icon: "application", section: "main" },
   { key: "alerts", label: "交易預警", icon: "alerts", section: "main" },
   { key: "cardFailures", label: "交易失敗", icon: "failures", section: "main" },
   { key: "overseasCards", label: "境外卡交易", icon: "overseasCard", section: "main" },

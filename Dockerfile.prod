@@ -9,6 +9,10 @@ RUN npm install --omit=dev
 COPY dist ./dist
 COPY dist-server ./dist-server
 COPY public ./public
-RUN mkdir -p /app/data
+COPY server/merchantForm/fill.py server/merchantForm/template.pdf ./server/merchantForm/
+COPY server/merchantForm/fonts ./server/merchantForm/fonts
+RUN apk add --no-cache python3 py3-pip \
+ && pip3 install --break-system-packages --no-cache-dir 'PyMuPDF>=1.24' 'fonttools>=4.50' \
+ && mkdir -p /app/data
 EXPOSE 3080
 CMD ["sh", "-c", "node dist-server/seed.js 2>/dev/null || true; node dist-server/index.js"]

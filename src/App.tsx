@@ -17,6 +17,7 @@ import { TigerTeamPage } from "@/pages/TigerTeamPage";
 import { TigerTeamSalesPage } from "@/pages/TigerTeamSalesPage";
 import { SalesOversightDetailPage, type SalesOversightContext } from "@/pages/SalesOversightDetailPage";
 import { UserCenterPage } from "@/pages/UserCenterPage";
+import { MerchantApplicationPage } from "@/pages/MerchantApplicationPage";
 import { PageLoader } from "@/components/PageLoader";
 import type { MerchantListSortKey } from "@/api/client";
 import { getMainScrollTop, scrollMainTo, scrollMainToTop } from "@/utils/mainScroll";
@@ -32,7 +33,8 @@ type MainView =
   | "admin"
   | "tigerTeam"
   | "leaderTeam"
-  | "userCenter";
+  | "userCenter"
+  | "merchantApplications";
 
 type MerchantsView = {
   type: "merchants";
@@ -108,7 +110,8 @@ function activeNavFromView(view: View): NavKey | null {
     view.type === "tigerTeam" ||
     view.type === "leaderTeam" ||
     view.type === "admin" ||
-    view.type === "userCenter"
+    view.type === "userCenter" ||
+    view.type === "merchantApplications"
   ) {
     return view.type;
   }
@@ -263,6 +266,7 @@ function AppRoutes() {
   return (
     <AppLayout activeNav={activeNavFromView(view)} onNavigate={navigate}>
       {view.type === "userCenter" ? <UserCenterPage /> : null}
+      {view.type === "merchantApplications" ? <MerchantApplicationPage /> : null}
 
       {view.type === "tigerTeamSales" ? (
         <TigerTeamSalesPage

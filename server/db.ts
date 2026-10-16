@@ -193,6 +193,17 @@ export function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id);
     CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action_type);
     CREATE INDEX IF NOT EXISTS idx_audit_logs_time ON audit_logs(created_at);
+
+    CREATE TABLE IF NOT EXISTS merchant_applications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_user_id INTEGER NOT NULL REFERENCES users(id),
+      legal_name TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_merchant_applications_owner
+      ON merchant_applications(owner_user_id, updated_at DESC);
   `);
 }
 

@@ -38,6 +38,8 @@ rsync -avz --delete \
   --exclude .cursor \
   --exclude '.DS_Store' \
   --exclude '._*' \
+  --exclude '.venv' \
+  --exclude '**/.venv' \
   "${LOCAL_DIR}/" "${SERVER}:${REMOTE_STAGING}/"
 
 echo "==> 以 sudo 覆盖 ${REMOTE_DIR}（保留 .env）"

@@ -13,4 +13,5 @@ release/*.tgz
 secrets/
 tools/alipay/.env
 tools/alipay/.venv/
+server/merchantForm/.venv/
 tools/alipay/output/

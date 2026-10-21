@@ -179,12 +179,11 @@ export function MerchantApplicationPage() {
       });
       setEditing(res.application);
       setPayload({ ...res.application.payload });
-      setMessage("已儲存，之後可以再打開修改");
-      await load();
-      if (alsoPdf) {
-        await downloadPdf(res.application.id, res.application.legalName);
-        setMessage("已儲存，PDF 已開始下載");
-      }
+      setMessage(alsoPdf ? "已儲存，正在生成 PDF…" : "已儲存，之後可以再打開修改");
+      const tasks: Promise<unknown>[] = [load()];
+      if (alsoPdf) tasks.push(downloadPdf(res.application.id, res.application.legalName));
+      await Promise.all(tasks);
+      if (alsoPdf) setMessage("已儲存，PDF 已開始下載");
     } catch (err) {
       setError(err instanceof Error ? err.message : "儲存失敗");
     } finally {

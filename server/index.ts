@@ -7,6 +7,7 @@ import { initSchema } from "./db.js";
 import { apiRouter } from "./routes.js";
 import { repairFailureMerchantSales } from "./repairFailureSales.js";
 import { syncAlertAckFromFollowUps } from "./followUp.js";
+import { startMerchantPdfWorker } from "./merchantForm/pdf.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, "..");
@@ -53,6 +54,7 @@ async function start() {
     console.log("  演示账号：admin / admin123");
     console.log("");
     setImmediate(() => {
+      startMerchantPdfWorker();
       try {
         const repaired = repairFailureMerchantSales();
         if (repaired.relinked > 0 || repaired.salesNamed > 0) {

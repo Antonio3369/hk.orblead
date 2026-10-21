@@ -17,6 +17,8 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(BASE, "template.pdf")
 FONT_FILE = os.path.join(BASE, "fonts", "PingFangSC-Regular.ttf")
 FONT = pymupdf.Font(fontfile=FONT_FILE)
+_SRC = None
+_FONT_CACHE = {}
 INK = (0, 0, 0)
 SIZE = 9.5
 
@@ -76,8 +78,22 @@ def tw(text, size):
     return FONT.text_length(text, fontsize=size)
 
 
+def source_font():
+    """CFF 表只解析一次。每次生成都重新打開 13MB 字體會把等待拉長。"""
+    global _SRC
+    if _SRC is None:
+        _SRC = TTFont(FONT_FILE)
+        _SRC.getGlyphSet()
+        _SRC.getBestCmap()
+    return _SRC
+
+
 def subset_font(text):
-    src = TTFont(FONT_FILE)
+    key = "".join(sorted(set(text)))
+    cached = _FONT_CACHE.get(key)
+    if cached is not None:
+        return cached
+    src = source_font()
     glyphset = src.getGlyphSet()
     cmap = src.getBestCmap()
     hmtx = src["hmtx"].metrics
@@ -130,7 +146,11 @@ def subset_font(text):
     fb.setupPost()
     buf = io.BytesIO()
     fb.save(buf)
-    return pymupdf.Font(fontbuffer=buf.getvalue())
+    font = pymupdf.Font(fontbuffer=buf.getvalue())
+    if len(_FONT_CACHE) >= 24:
+        _FONT_CACHE.clear()
+    _FONT_CACHE[key] = font
+    return font
 
 
 def flush_text(doc):
@@ -248,6 +268,47 @@ def fill(data):
     return out.getvalue()
 
 
+def read_exact(n):
+    buf = b""
+    while len(buf) < n:
+        chunk = sys.stdin.buffer.read(n - len(buf))
+        if not chunk:
+            return None
+        buf += chunk
+    return buf
+
+
+def write_frame(flag, data):
+    sys.stdout.buffer.write(bytes((flag,)))
+    sys.stdout.buffer.write(len(data).to_bytes(4, "big"))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+
+def serve():
+    source_font()
+    while True:
+        header = read_exact(4)
+        if header is None:
+            return
+        size = int.from_bytes(header, "big")
+        if size <= 0 or size > 2_000_000:
+            write_frame(1, "申請內容過長".encode())
+            return
+        raw = read_exact(size)
+        if raw is None:
+            return
+        try:
+            pdf = fill(json.loads(raw.decode("utf-8")))
+        except Exception as exc:
+            write_frame(1, str(exc).encode() or "生成 PDF 失敗".encode())
+            continue
+        write_frame(0, pdf)
+
+
 if __name__ == "__main__":
-    payload = json.load(sys.stdin)
-    sys.stdout.buffer.write(fill(payload))
+    if "--serve" in sys.argv:
+        serve()
+    else:
+        payload = json.load(sys.stdin)
+        sys.stdout.buffer.write(fill(payload))

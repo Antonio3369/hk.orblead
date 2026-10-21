@@ -1,10 +1,10 @@
 # 立得香港看板 · AI 助手交接指南
 
 > **用途**：给 Cursor / 新 AI 助手或新开发者。**读完本文应能独立改功能、查 bug、发版。**  
-> **最后更新**：2026-07-22  
+> **最后更新**：2026-10-21  
 > **Mac 路径**：`/Users/xin/projects/hk.orblead`（历史亦写作 `sales-data-agent`）  
 > **生产**：https://hk.orblead.com · 服务器 `43.136.25.181:3080` · 目录 `/opt/sales-data-agent`  
-> **最新部署**：2026-07-22 `npm run deploy`（bundle `index-DShxu6RJ.js` / `index-fY-5nZAv.css`）
+> **最新部署**：2026-10-21 `npm run deploy`（`5021a55`；bundle `index-BPKV9ClB.js` / `index-BUm3lrIu.css`）
 
 ---
 
@@ -542,6 +542,17 @@ Schema 与迁移在 **`server/db.ts`** 的 `initSchema()`（启动时执行）�
 
 **发版后验证**：强制刷新 → 商户列表桌面下拉表头吸顶；小额上月商户日均环比无 ±千万 %；手机工作台见叙事 + 登出 + 回顶。
 
+### 11.4 2026-10-21 · 商户申请表 PDF 变快（✅ 已发版）
+
+| 项 | 内容 |
+|----|------|
+| **现象** | 点「生成 PDF」要等很久 |
+| **根因** | 每次请求新开 Python，并重新解析 13MB 苹方（CFF）再子集化 |
+| **修复** | Node 拉起常驻 `fill.py --serve`；字体表只解析一次，相同用字复用子集。`5021a55` |
+| **发版** | `npm run deploy`；bundle `index-BPKV9ClB.js` / `index-BUm3lrIu.css` |
+
+**发版后验证**：强制刷新 → 商户申请表再生成一份 PDF，第二次应明显快于第一次冷启动。
+
 ---
 
 ## 十二、发版
@@ -594,6 +605,7 @@ npm run pack:frontend        # → release/sales-dist-*.tgz
 | 境外卡页全是 Visa/MC 却仍为空 | 须导入含 **卡歸屬地** 的新报表；旧记录无该列需 append 补空 |
 | 境外卡页一直转圈 | 查 `/overseas-cards/overview` 是否 500/超时；接口失败应显示错误（2026-07-18 已修 UI） |
 | 重复 append 很慢 / 整站卡死 | 勿升配带宽 CPU；用 §10.5 批量逻辑；避免导入时并发大量请求 |
+| 每次生成申请表 PDF 都要等很久 | 用常驻 Python（`fill.py --serve`），不要每次 `spawn` 再拆 13MB 字体 |
 | 同卡多笔只有 Visa/MC | 银联也要计入；区间为 **3000–5000** |
 | 上月近零商户日均环比 ±千万 % | 须走 **10 HKD 底数** + 999.9% 封顶；勿裸算除法 |
 
@@ -603,6 +615,7 @@ npm run pack:frontend        # → release/sales-dist-*.tgz
 
 - [x] **2026-07-18 一键发版**（环比起承 + 境外卡卡歸屬地 + 本月排名 + 导入性能 + 上传进度；`npm run deploy`）
 - [x] **2026-07-22 发版**（表头吸顶 + 日均环比底数 + 手机叙事/登出/回顶；`npm run deploy`）
+- [x] **2026-10-21 发版**（商户申请表 PDF 常驻进程；`5021a55`）
 - [ ] 运营持续 append 含「卡歸屬地」的机构日报，验证境外卡「本月排名」与「近 3 日」数据量
 - [ ] **AI 叙事 Phase 2**：Sales/Leader AI 简报（未开始）
 - [ ] **AI 叙事 Phase 3**：预警 AI 解读（未开始）

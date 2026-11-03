@@ -25,8 +25,6 @@
   th { background:#0d1219; color:var(--muted); font-weight:600; font-size:0.7rem; }
   tr:last-child td { border-bottom:none; }
   tr.below-floor { background:rgba(255,107,107,0.14); }
-  .floor { font-variant-numeric:tabular-nums; color:var(--muted); }
-  .floor.missing { color:var(--muted); }
   .warn-hint { font-size:0.75rem; color:var(--bad); font-weight:600; }
   input.num { width:4.2rem; background:var(--input); border:1px solid var(--line); border-radius:6px; color:var(--text); padding:5px 6px; font-variant-numeric:tabular-nums; font-size:0.8rem; }
   input.num:focus { outline:1px solid var(--accent); border-color:var(--accent); }
@@ -47,7 +45,6 @@
   }
   .toolbar .status { color: var(--muted); font-size: 0.8rem; }
   .toolbar .status.ok { color: var(--ok); }
-  .toolbar .floor-src { color: var(--muted); font-size: 0.75rem; }
 </style>
 </head>
 <body>
@@ -56,12 +53,10 @@
   <div class="toolbar">
     <button type="button" id="btnSave" class="btn">保存</button>
     <span class="status" id="saveStatus">尚未保存</span>
-    <span class="floor-src" id="floorSrc"></span>
   </div>
   <div class="note">
     「保存」只写入本机浏览器（<code>hk-quote-sales-v1</code>），不会改动内部搭档页或线上默认。
-    「最低报价」来自同浏览器内内部页已保存数据（<code>hk-quote-compare-v1</code>）；若无则使用本页内置默认最低值。
-    报价低于最低时会提示并标红该行，但仍可保存。
+    报价过低时会提示并标红该行，但仍可保存。
   </div>
   <div class="nav">
     <a href="#block-sme">SME</a>
@@ -181,11 +176,6 @@ function parseNum(v) {
   return Number.isNaN(n) ? null : n;
 }
 
-function fmtFloor(n) {
-  if (n == null || Number.isNaN(n)) return '—';
-  return n + '%';
-}
-
 function buildSeedFloors() {
   const floors = {};
   BLOCKS.forEach(b => b.parts.forEach(p => {
@@ -221,22 +211,8 @@ function readPartnerFloors() {
 }
 
 function refreshFloors() {
-  const { floors, fromPartner } = readPartnerFloors();
+  const { floors } = readPartnerFloors();
   floorById = floors;
-  const src = document.getElementById('floorSrc');
-  if (src) {
-    src.textContent = fromPartner
-      ? '最低报价：已同步内部搭档页本机保存'
-      : '最低报价：内置默认（内部页未保存或未打开过）';
-  }
-  document.querySelectorAll('tr[data-id]').forEach(tr => {
-    const id = tr.dataset.id;
-    const cell = tr.querySelector('[data-c=floor]');
-    if (!cell) return;
-    const f = floorById[id];
-    cell.textContent = fmtFloor(f);
-    cell.classList.toggle('missing', f == null);
-  });
   updateRowWarnings();
 }
 
@@ -248,16 +224,15 @@ function quoteInput(val) {
 function renderPart(part) {
   const offline = part.kind === 'offline';
   const head = offline
-    ? `<tr><th>通道</th><th>最低报价 %</th><th>报价 %</th><th></th></tr>`
-    : `<tr><th>通道</th><th>最低报价 %</th><th>报价 %</th><th>单笔</th><th></th></tr>`;
+    ? `<tr><th>通道</th><th>报价 %</th><th></th></tr>`
+    : `<tr><th>通道</th><th>报价 %</th><th>单笔</th><th></th></tr>`;
   const body = part.rows.map(r => {
     const floor = seedFloorFromRow(r, part.kind);
-    const floorTxt = fmtFloor(floor);
     if (offline) {
-      return `<tr data-id="${r.id}" data-kind="offline"><td>${r.name}</td><td class="floor calc" data-c="floor">${floorTxt}</td><td>${quoteInput(floor != null ? floor : '')}</td><td class="warn-hint" data-c="warn"></td></tr>`;
+      return `<tr data-id="${r.id}" data-kind="offline"><td>${r.name}</td><td>${quoteInput(floor != null ? floor : '')}</td><td class="warn-hint" data-c="warn"></td></tr>`;
     }
     const fee = r.onlineFee == null ? '<span class="dash">—</span>' : r.onlineFee;
-    return `<tr data-id="${r.id}" data-kind="online"><td>${r.name}</td><td class="floor calc" data-c="floor">${floorTxt}</td><td>${quoteInput(r.onlineMin != null ? r.onlineMin : '')}</td><td class="calc">${fee}</td><td class="warn-hint" data-c="warn"></td></tr>`;
+    return `<tr data-id="${r.id}" data-kind="online"><td>${r.name}</td><td>${quoteInput(r.onlineMin != null ? r.onlineMin : '')}</td><td class="calc">${fee}</td><td class="warn-hint" data-c="warn"></td></tr>`;
   }).join('');
   const sub = part.subtitle ? `<div class="part-hd">${part.subtitle}</div>` : '';
   return `${sub}<div class="wrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
@@ -355,7 +330,7 @@ function onQuoteBlur(tr) {
   const quote = getQuote(tr);
   const floor = floorById[id];
   if (quote != null && floor != null && quote < floor) {
-    alert('低于最低报价（' + tr.querySelector('td')?.textContent + '：报价 ' + quote + '%，最低 ' + floor + '%）');
+    alert('低于最低报价');
   }
   updateRowWarnings();
 }
@@ -385,7 +360,7 @@ function render() {
   const hadSales = loadSalesPersisted();
   if (!hadSales) {
     seedQuotesToFloors();
-    setStatus('首次打开：报价已对齐最低报价（尚未保存）', false);
+    setStatus('首次打开：已填入起始报价（尚未保存）', false);
   }
   bindEvents();
   updateRowWarnings();

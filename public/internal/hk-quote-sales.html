@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>香港报价对照 · 销售版</title>
+<style>
+  :root { --bg:#0f1419; --card:#1a2332; --text:#e7ecf3; --muted:#8b9bb4; --ok:#3dd68c; --bad:#ff6b6b; --line:#2a3548; --accent:#5b8def; --input:#0d1219; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: ui-sans-serif, system-ui, "PingFang TC", "Noto Sans TC", sans-serif; background:var(--bg); color:var(--text); padding:20px; }
+  h1 { font-size:1.2rem; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:0.85rem; margin-bottom:12px; }
+  .note { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:14px; font-size:0.82rem; color:var(--muted); }
+  .nav { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+  .nav a { color:var(--accent); text-decoration:none; font-size:0.85rem; padding:6px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); }
+  .block { background:var(--card); border:1px solid var(--line); border-radius:14px; margin-bottom:18px; overflow:hidden; }
+  .block-hd { padding:12px 14px; background:#121a26; border-bottom:1px solid var(--line); font-weight:600; color:var(--accent); font-size:0.9rem; }
+  .block-hd span { display:block; color:var(--muted); font-weight:400; font-size:0.75rem; margin-top:4px; }
+  .part-hd { padding:10px 14px 6px; color:var(--text); font-size:0.8rem; font-weight:600; border-top:1px solid var(--line); }
+  #block-plink { border-color:#7c5cff; box-shadow:0 0 0 1px rgba(124,92,255,0.35); }
+  #block-plink .block-hd { color:#c4b5fd; }
+  .wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:0.8rem; min-width:480px; }
+  th, td { padding:8px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
+  th { background:#0d1219; color:var(--muted); font-weight:600; font-size:0.7rem; }
+  tr:last-child td { border-bottom:none; }
+  tr.below-floor { background:rgba(255,107,107,0.14); }
+  .floor { font-variant-numeric:tabular-nums; color:var(--muted); }
+  .floor.missing { color:var(--muted); }
+  .warn-hint { font-size:0.75rem; color:var(--bad); font-weight:600; }
+  input.num { width:4.2rem; background:var(--input); border:1px solid var(--line); border-radius:6px; color:var(--text); padding:5px 6px; font-variant-numeric:tabular-nums; font-size:0.8rem; }
+  input.num:focus { outline:1px solid var(--accent); border-color:var(--accent); }
+  input.num::-webkit-outer-spin-button,
+  input.num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input.num[type=number] { -moz-appearance: textfield; appearance: textfield; }
+  .calc { font-variant-numeric:tabular-nums; white-space:nowrap; }
+  footer { margin-top:8px; color:var(--muted); font-size:0.75rem; }
+  .dash { color:var(--muted); }
+  .btn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:7px 12px; font-size:0.85rem; cursor:pointer; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn:active { filter:brightness(0.95); }
+  .toolbar {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    background: #121a26; border: 1px solid var(--line); border-radius: 12px;
+    padding: 10px 12px; margin-bottom: 14px;
+  }
+  .toolbar .status { color: var(--muted); font-size: 0.8rem; }
+  .toolbar .status.ok { color: var(--ok); }
+  .toolbar .floor-src { color: var(--muted); font-size: 0.75rem; }
+</style>
+</head>
+<body>
+  <h1>香港报价对照 · 销售版</h1>
+  <p class="sub">顺序：SME → Standard 线下 → Standard 线上 → Payment Link</p>
+  <div class="toolbar">
+    <button type="button" id="btnSave" class="btn">保存</button>
+    <span class="status" id="saveStatus">尚未保存</span>
+    <span class="floor-src" id="floorSrc"></span>
+  </div>
+  <div class="note">
+    「保存」只写入本机浏览器（<code>hk-quote-sales-v1</code>），不会改动内部搭档页或线上默认。
+    「最低报价」来自同浏览器内内部页已保存数据（<code>hk-quote-compare-v1</code>）；若无则使用本页内置默认最低值。
+    报价低于最低时会提示并标红该行，但仍可保存。
+  </div>
+  <div class="nav">
+    <a href="#block-sme">SME</a>
+    <a href="#block-std-off">Standard 线下</a>
+    <a href="#block-std-on">Standard 线上</a>
+    <a href="#block-plink">Payment Link</a>
+  </div>
+  <div id="app"></div>
+  <footer>hk-quote-sales.html</footer>
+<script>
+const BLOCKS = [
+  {
+    id: "sme",
+    title: "SME / 优惠档 · 线下",
+    desc: "对客正常手续费 1.40%（佣金规则暂不纳入）",
+    parts: [
+      {
+        kind: "offline",
+        rows: [
+          { id: "visa_sme", name: "Visa · SME", offlineMin: 1.4, onlineMin: null, onlineFee: null },
+          { id: "mc_sme", name: "Master · SME", offlineMin: 1.4, onlineMin: null, onlineFee: null },
+          { id: "amex_sme", name: "AMEX · SME", offlineMin: 1.5, onlineMin: null, onlineFee: null }
+        ]
+      }
+    ]
+  },
+  {
+    id: "std-off",
+    title: "Standard · 线下",
+    desc: "正常手续费 + 年交易量档（本地卡区间）；佣金部分按 Boss 要求暂不纳入",
+    parts: [
+      {
+        kind: "offline",
+        subtitle: "Visa / Master（本地按年交易量：&lt;100万 1.50% · 100–800万 2.40% · ≥800万 2.50%；境外正常 3.10%，量档表写 3.00%）",
+        rows: [
+          { id: "cp_visa_l", name: "Visa 本地 · 线下持卡", offlineMin: 2.4, onlineMin: null, onlineFee: null },
+          { id: "cp_visa_f", name: "Visa 境外 · 线下持卡", offlineMin: 3.1, onlineMin: null, onlineFee: null },
+          { id: "cp_mc_l", name: "Master 本地 · 线下持卡", offlineMin: 2.4, onlineMin: null, onlineFee: null },
+          { id: "cp_mc_f", name: "Master 境外 · 线下持卡", offlineMin: 3.1, onlineMin: null, onlineFee: null },
+          { id: "cp_amex_l", name: "AMEX 本地 · 线下持卡", offlineMin: null, onlineMin: null, onlineFee: null },
+          { id: "cp_amex_f", name: "AMEX 境外 · 线下持卡", offlineMin: 3.1, onlineMin: null, onlineFee: null },
+          { id: "cp_cup", name: "银联 · 线下", offlineMin: 1.8, onlineMin: null, onlineFee: null },
+          { id: "wallet_ali_off_hk", name: "支付宝HK钱包 · 线下", offlineMin: 1.2, onlineMin: null, onlineFee: null },
+          { id: "wallet_ali_off_cn", name: "支付宝大陆钱包 · 线下", offlineMin: 0.9, onlineMin: null, onlineFee: null },
+          { id: "wallet_wx_off_hk", name: "微信HK钱包 · 线下", offlineMin: 1.2, onlineMin: null, onlineFee: null },
+          { id: "wallet_wx_off_cn", name: "微信大陆钱包 · 线下", offlineMin: 0.9, onlineMin: null, onlineFee: null },
+          { id: "octopus_off", name: "八达通 · 线下", offlineMin: 1.45, onlineMin: null, onlineFee: null }
+        ]
+      }
+    ]
+  },
+  {
+    id: "std-on",
+    title: "Standard · 线上",
+    desc: "对客线上收费标准 2026-10-16；网站/App/小程序",
+    parts: [
+      {
+        kind: "online",
+        rows: [
+          { id: "visa_local", name: "Visa 本地", offlineMin: null, onlineMin: 2.8, onlineFee: 2.5 },
+          { id: "visa_intl", name: "Visa 国际", offlineMin: null, onlineMin: 3.4, onlineFee: 2.5 },
+          { id: "mc_local", name: "Master 本地", offlineMin: null, onlineMin: 2.8, onlineFee: 2.5 },
+          { id: "mc_intl", name: "Master 国际", offlineMin: null, onlineMin: 3.4, onlineFee: 2.5 },
+          { id: "amex_local", name: "AMEX 本地", offlineMin: null, onlineMin: 2.4, onlineFee: 2.5 },
+          { id: "amex_intl", name: "AMEX 国际", offlineMin: null, onlineMin: 3, onlineFee: 2.5 },
+          { id: "cup_online", name: "银联", offlineMin: null, onlineMin: null, onlineFee: null },
+          { id: "alipay_hk", name: "支付宝HK钱包", offlineMin: null, onlineMin: 1.6, onlineFee: 0 },
+          { id: "wechat_hk", name: "微信HK钱包", offlineMin: null, onlineMin: 1.6, onlineFee: 0 },
+          { id: "alipay_cn", name: "支付宝大陆钱包", offlineMin: null, onlineMin: 1.6, onlineFee: 0 },
+          { id: "wechat_cn", name: "微信大陆钱包", offlineMin: null, onlineMin: 1.6, onlineFee: 0 },
+          { id: "octopus", name: "八达通", offlineMin: null, onlineMin: 1.6, onlineFee: 0 }
+        ]
+      }
+    ]
+  },
+  {
+    id: "plink",
+    title: "PayPal / Payment link · 发起链接收款",
+    desc: "独立板块；Payment link 通道",
+    parts: [
+      {
+        kind: "online",
+        rows: [
+          { id: "paypal", name: "PayPal", offlineMin: null, onlineMin: null, onlineFee: null },
+          { id: "pl_visa_l", name: "Payment link · Visa/Master 本地", offlineMin: null, onlineMin: 2.8, onlineFee: 2.5 },
+          { id: "pl_visa_f", name: "Payment link · Visa/Master 国际", offlineMin: null, onlineMin: 3.6, onlineFee: 2.5 },
+          { id: "pl_amex_l", name: "Payment link · Amex 本地", offlineMin: null, onlineMin: 2.9, onlineFee: 0 },
+          { id: "pl_amex_f", name: "Payment link · Amex 国际", offlineMin: null, onlineMin: 3.3, onlineFee: 0 },
+          { id: "pl_ali_cn", name: "Payment link · 支付宝大陆钱包", offlineMin: null, onlineMin: 1.6, onlineFee: 0 },
+          { id: "pl_ali_hk", name: "Payment link · 支付宝HK钱包", offlineMin: null, onlineMin: 1.6, onlineFee: 0 },
+          { id: "pl_wx_cn", name: "Payment link · 微信大陆钱包", offlineMin: null, onlineMin: 1.6, onlineFee: 0 },
+          { id: "pl_wx_hk", name: "Payment link · 微信HK钱包", offlineMin: null, onlineMin: 1.6, onlineFee: 0 },
+          { id: "pl_octopus", name: "Payment link · 八达通", offlineMin: null, onlineMin: 1.6, onlineFee: 0 }
+        ]
+      }
+    ]
+  }
+];
+
+const SALES_STORAGE_KEY = 'hk-quote-sales-v1';
+const PARTNER_STORAGE_KEY = 'hk-quote-compare-v1';
+
+/** @type {Record<string, 'offline'|'online'>} */
+const ROW_KIND = {};
+BLOCKS.forEach(b => b.parts.forEach(p => p.rows.forEach(r => { ROW_KIND[r.id] = p.kind; })));
+
+/** @type {Record<string, number|null>} */
+let floorById = {};
+
+function seedFloorFromRow(row, kind) {
+  return kind === 'offline' ? row.offlineMin : row.onlineMin;
+}
+
+function parseNum(v) {
+  if (v == null || v === '') return null;
+  const n = parseFloat(v);
+  return Number.isNaN(n) ? null : n;
+}
+
+function fmtFloor(n) {
+  if (n == null || Number.isNaN(n)) return '—';
+  return n + '%';
+}
+
+function buildSeedFloors() {
+  const floors = {};
+  BLOCKS.forEach(b => b.parts.forEach(p => {
+    p.rows.forEach(r => { floors[r.id] = seedFloorFromRow(r, p.kind); });
+  }));
+  return floors;
+}
+
+function readPartnerFloors() {
+  const floors = buildSeedFloors();
+  let fromPartner = false;
+  try {
+    const raw = localStorage.getItem(PARTNER_STORAGE_KEY);
+    if (!raw) return { floors, fromPartner };
+    const st = JSON.parse(raw);
+    if (!st || !st.rows) return { floors, fromPartner };
+    fromPartner = true;
+    Object.keys(st.rows).forEach(id => {
+      const kind = ROW_KIND[id];
+      if (!kind) return;
+      const fields = st.rows[id];
+      const key = kind === 'offline' ? 'offlineMin' : 'onlineMin';
+      const v = fields[key];
+      if (v === '' || v == null) {
+        floors[id] = null;
+      } else {
+        const n = parseFloat(v);
+        floors[id] = Number.isNaN(n) ? floors[id] : n;
+      }
+    });
+  } catch (_) { /* keep seeds */ }
+  return { floors, fromPartner };
+}
+
+function refreshFloors() {
+  const { floors, fromPartner } = readPartnerFloors();
+  floorById = floors;
+  const src = document.getElementById('floorSrc');
+  if (src) {
+    src.textContent = fromPartner
+      ? '最低报价：已同步内部搭档页本机保存'
+      : '最低报价：内置默认（内部页未保存或未打开过）';
+  }
+  document.querySelectorAll('tr[data-id]').forEach(tr => {
+    const id = tr.dataset.id;
+    const cell = tr.querySelector('[data-c=floor]');
+    if (!cell) return;
+    const f = floorById[id];
+    cell.textContent = fmtFloor(f);
+    cell.classList.toggle('missing', f == null);
+  });
+  updateRowWarnings();
+}
+
+function quoteInput(val) {
+  const v = (val == null || val === '') ? '' : val;
+  return `<input data-f="quote" class="num" type="number" step="0.01" value="${v}" placeholder="—"/>`;
+}
+
+function renderPart(part) {
+  const offline = part.kind === 'offline';
+  const head = offline
+    ? `<tr><th>通道</th><th>最低报价 %</th><th>报价 %</th><th></th></tr>`
+    : `<tr><th>通道</th><th>最低报价 %</th><th>报价 %</th><th>单笔</th><th></th></tr>`;
+  const body = part.rows.map(r => {
+    const floor = seedFloorFromRow(r, part.kind);
+    const floorTxt = fmtFloor(floor);
+    if (offline) {
+      return `<tr data-id="${r.id}" data-kind="offline"><td>${r.name}</td><td class="floor calc" data-c="floor">${floorTxt}</td><td>${quoteInput(floor != null ? floor : '')}</td><td class="warn-hint" data-c="warn"></td></tr>`;
+    }
+    const fee = r.onlineFee == null ? '<span class="dash">—</span>' : r.onlineFee;
+    return `<tr data-id="${r.id}" data-kind="online"><td>${r.name}</td><td class="floor calc" data-c="floor">${floorTxt}</td><td>${quoteInput(r.onlineMin != null ? r.onlineMin : '')}</td><td class="calc">${fee}</td><td class="warn-hint" data-c="warn"></td></tr>`;
+  }).join('');
+  const sub = part.subtitle ? `<div class="part-hd">${part.subtitle}</div>` : '';
+  return `${sub}<div class="wrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
+function renderBlock(b) {
+  return `<section class="block" id="block-${b.id}"><div class="block-hd">${b.title}<span>${b.desc}</span></div>${b.parts.map(renderPart).join('')}</section>`;
+}
+
+function getQuote(tr) {
+  const el = tr.querySelector('[data-f=quote]');
+  if (!el || el.value === '') return null;
+  return parseNum(el.value);
+}
+
+function updateRowWarnings() {
+  document.querySelectorAll('tr[data-id]').forEach(tr => {
+    const id = tr.dataset.id;
+    const quote = getQuote(tr);
+    const floor = floorById[id];
+    const warn = tr.querySelector('[data-c=warn]');
+    const below = quote != null && floor != null && quote < floor;
+    tr.classList.toggle('below-floor', below);
+    if (warn) warn.textContent = below ? '低于最低报价' : '';
+  });
+}
+
+function collectSalesState() {
+  const quotes = {};
+  document.querySelectorAll('tr[data-id]').forEach(tr => {
+    const el = tr.querySelector('[data-f=quote]');
+    quotes[tr.dataset.id] = el ? el.value : '';
+  });
+  return { quotes, savedAt: new Date().toISOString() };
+}
+
+function applySalesState(state) {
+  if (!state || !state.quotes) return false;
+  document.querySelectorAll('tr[data-id]').forEach(tr => {
+    const v = state.quotes[tr.dataset.id];
+    if (v == null) return;
+    const el = tr.querySelector('[data-f=quote]');
+    if (el) el.value = v;
+  });
+  return true;
+}
+
+function seedQuotesToFloors() {
+  document.querySelectorAll('tr[data-id]').forEach(tr => {
+    const id = tr.dataset.id;
+    const f = floorById[id];
+    const el = tr.querySelector('[data-f=quote]');
+    if (!el || f == null) return;
+    el.value = String(f);
+  });
+}
+
+function setStatus(msg, ok) {
+  const el = document.getElementById('saveStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'status' + (ok ? ' ok' : '');
+}
+
+function persistSales() {
+  try {
+    const st = collectSalesState();
+    localStorage.setItem(SALES_STORAGE_KEY, JSON.stringify(st));
+    const t = new Date();
+    const hh = String(t.getHours()).padStart(2, '0');
+    const mm = String(t.getMinutes()).padStart(2, '0');
+    const ss = String(t.getSeconds()).padStart(2, '0');
+    setStatus('已保存 ' + hh + ':' + mm + ':' + ss, true);
+  } catch (e) {
+    setStatus('保存失败（浏览器可能禁用本地存储）', false);
+  }
+}
+
+function loadSalesPersisted() {
+  try {
+    const raw = localStorage.getItem(SALES_STORAGE_KEY);
+    if (!raw) return false;
+    const st = JSON.parse(raw);
+    applySalesState(st);
+    setStatus(st.savedAt ? ('已恢复上次修改 · ' + st.savedAt.replace('T', ' ').slice(0, 19)) : '已恢复上次修改', true);
+    return true;
+  } catch (e) {
+    setStatus('恢复失败', false);
+    return false;
+  }
+}
+
+function onQuoteBlur(tr) {
+  const id = tr.dataset.id;
+  const quote = getQuote(tr);
+  const floor = floorById[id];
+  if (quote != null && floor != null && quote < floor) {
+    alert('低于最低报价（' + tr.querySelector('td')?.textContent + '：报价 ' + quote + '%，最低 ' + floor + '%）');
+  }
+  updateRowWarnings();
+}
+
+function bindEvents() {
+  const onInput = () => {
+    updateRowWarnings();
+    persistSales();
+  };
+  document.querySelectorAll('input[data-f=quote]').forEach(el => {
+    el.addEventListener('input', onInput);
+    el.addEventListener('blur', () => onQuoteBlur(el.closest('tr')));
+  });
+  document.getElementById('btnSave')?.addEventListener('click', () => {
+    persistSales();
+    updateRowWarnings();
+  });
+  window.addEventListener('focus', () => refreshFloors());
+  window.addEventListener('storage', (e) => {
+    if (e.key === PARTNER_STORAGE_KEY) refreshFloors();
+  });
+}
+
+function render() {
+  document.getElementById('app').innerHTML = BLOCKS.map(renderBlock).join('');
+  refreshFloors();
+  const hadSales = loadSalesPersisted();
+  if (!hadSales) {
+    seedQuotesToFloors();
+    setStatus('首次打开：报价已对齐最低报价（尚未保存）', false);
+  }
+  bindEvents();
+  updateRowWarnings();
+}
+
+render();
+</script>
+</body>
+</html>

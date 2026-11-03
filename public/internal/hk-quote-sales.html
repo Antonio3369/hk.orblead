@@ -210,10 +210,57 @@ function readPartnerFloors() {
   return { floors, fromPartner };
 }
 
+function syncQuotesFromFloorRefresh(prevFloors) {
+  let updated = 0;
+  document.querySelectorAll('tr[data-id]').forEach(tr => {
+    const id = tr.dataset.id;
+    const newFloor = floorById[id];
+    const prevFloor = prevFloors[id];
+    const el = tr.querySelector('[data-f=quote]');
+    if (!el || newFloor == null) return;
+    const quote = getQuote(tr);
+    const empty = el.value === '';
+    const atPrevFloor = quote != null && prevFloor != null && quote === prevFloor;
+    if (!empty && !atPrevFloor) return;
+    const newStr = String(newFloor);
+    if (el.value !== newStr) {
+      el.value = newStr;
+      updated++;
+    }
+  });
+  return updated;
+}
+
+function updateFloorCells() {
+  document.querySelectorAll('tr[data-id]').forEach(tr => {
+    const id = tr.dataset.id;
+    const floor = floorById[id];
+    const cell = tr.querySelector('[data-c=floor]');
+    if (!cell) return;
+    if (floor == null) {
+      cell.textContent = '—';
+      cell.classList.add('dash');
+    } else {
+      cell.textContent = String(floor);
+      cell.classList.remove('dash');
+    }
+  });
+}
+
 function refreshFloors() {
+  const prevFloors = { ...floorById };
   const { floors } = readPartnerFloors();
   floorById = floors;
+  updateFloorCells();
+  const synced = syncQuotesFromFloorRefresh(prevFloors);
   updateRowWarnings();
+  if (synced > 0) {
+    try {
+      const st = collectSalesState();
+      localStorage.setItem(SALES_STORAGE_KEY, JSON.stringify(st));
+    } catch (_) { /* ignore */ }
+    setStatus('已同步管理员下限', true);
+  }
 }
 
 function quoteInput(val) {
@@ -224,15 +271,16 @@ function quoteInput(val) {
 function renderPart(part) {
   const offline = part.kind === 'offline';
   const head = offline
-    ? `<tr><th>通道</th><th>报价 %</th><th></th></tr>`
-    : `<tr><th>通道</th><th>报价 %</th><th>单笔</th><th></th></tr>`;
+    ? `<tr><th>通道</th><th>最低 %</th><th>报价 %</th><th></th></tr>`
+    : `<tr><th>通道</th><th>最低 %</th><th>报价 %</th><th>单笔</th><th></th></tr>`;
   const body = part.rows.map(r => {
     const floor = seedFloorFromRow(r, part.kind);
+    const floorCell = `<td class="calc dash" data-c="floor">—</td>`;
     if (offline) {
-      return `<tr data-id="${r.id}" data-kind="offline"><td>${r.name}</td><td>${quoteInput(floor != null ? floor : '')}</td><td class="warn-hint" data-c="warn"></td></tr>`;
+      return `<tr data-id="${r.id}" data-kind="offline"><td>${r.name}</td>${floorCell}<td>${quoteInput(floor != null ? floor : '')}</td><td class="warn-hint" data-c="warn"></td></tr>`;
     }
     const fee = r.onlineFee == null ? '<span class="dash">—</span>' : r.onlineFee;
-    return `<tr data-id="${r.id}" data-kind="online"><td>${r.name}</td><td>${quoteInput(r.onlineMin != null ? r.onlineMin : '')}</td><td class="calc">${fee}</td><td class="warn-hint" data-c="warn"></td></tr>`;
+    return `<tr data-id="${r.id}" data-kind="online"><td>${r.name}</td>${floorCell}<td>${quoteInput(r.onlineMin != null ? r.onlineMin : '')}</td><td class="calc">${fee}</td><td class="warn-hint" data-c="warn"></td></tr>`;
   }).join('');
   const sub = part.subtitle ? `<div class="part-hd">${part.subtitle}</div>` : '';
   return `${sub}<div class="wrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;

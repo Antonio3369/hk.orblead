@@ -24,7 +24,7 @@ export const APPLICATION_TEXT_FIELDS = [
 export const APPLICATION_RATE_FIELDS = [
   "cpVisaDom", "cpVisaFor", "cpVisaSme",
   "cpMcDom", "cpMcFor", "cpMcSme",
-  "cpAmexDom", "cpAmexFor",
+  "cpAmexDom", "cpAmexFor", "cpAmexSme",
   "cpUpDom",
   "cnpVisaDom", "cnpVisaFor",
   "cnpMcDom", "cnpMcFor",

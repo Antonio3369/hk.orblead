@@ -61,7 +61,7 @@ const RATE_GROUPS: { title: string; headers: string[]; rows: { name: string; cel
     rows: [
       { name: "Visa", cells: [{ key: "cpVisaDom" }, { key: "cpVisaFor" }, { key: "cpVisaSme" }] },
       { name: "MasterCard 萬事達", cells: [{ key: "cpMcDom" }, { key: "cpMcFor" }, { key: "cpMcSme" }] },
-      { name: "AMEX 美國運通", cells: [{ key: "cpAmexDom" }, { key: "cpAmexFor" }, { text: "不適用" }] },
+      { name: "AMEX 美國運通", cells: [{ key: "cpAmexDom" }, { key: "cpAmexFor" }, { key: "cpAmexSme" }] },
       { name: "銀聯", cells: [{ key: "cpUpDom" }, { text: "不適用" }, { text: "不適用" }] },
     ],
   },

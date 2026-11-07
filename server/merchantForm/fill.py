@@ -48,7 +48,7 @@ TEXT_FIELDS = {
 RATE_ANCHORS = {
     "cpVisaDom": (325.7, 189.7), "cpVisaFor": (404.1, 189.7), "cpVisaSme": (481.5, 189.7),
     "cpMcDom": (325.7, 206.8), "cpMcFor": (404.1, 206.8), "cpMcSme": (481.5, 206.8),
-    "cpAmexDom": (325.7, 224.4), "cpAmexFor": (404.1, 224.4),
+    "cpAmexDom": (325.7, 224.4), "cpAmexFor": (404.1, 224.4), "cpAmexSme": (481.5, 224.4),
     "cpUpDom": (362.4, 242.5),
     "cnpVisaDom": (325.7, 259.9), "cnpVisaFor": (404.1, 259.9),
     "cnpMcDom": (325.7, 277.2), "cnpMcFor": (404.1, 277.2),

@@ -61,6 +61,11 @@ RATE_ANCHORS = {
     "octOn": (362.4, 453.3),
 }
 
+# SME cells that stayed「N/A 不適用」on the template after becoming fillable in the UI.
+RATE_TEMPLATE_NA_COVER = {
+    "cpAmexSme": pymupdf.Rect(448, 214, 502, 231),
+}
+
 CHECKBOXES = {
     "lang_zh": (79.4, 274.6), "lang_en": (236.6, 274.6),
     "own_sole": (79.4, 636.4), "own_part": (212.2, 636.4),
@@ -232,10 +237,22 @@ def fill(data):
             put(doc[pno], 0, y, val, right=163.7)
         else:
             put(doc[pno], x, y, val, maxw=maxw)
+    rate_page = doc[1]
+    filled_rates = []
+    na_redact = False
     for key, (px, y) in RATE_ANCHORS.items():
         val = (data.get(key) or "").strip().rstrip("%").strip()
-        if val:
-            put(doc[1], 0, y, val, right=px)
+        if not val:
+            continue
+        filled_rates.append((px, y, val))
+        cover = RATE_TEMPLATE_NA_COVER.get(key)
+        if cover is not None:
+            rate_page.add_redact_annot(cover, fill=(1, 1, 1))
+            na_redact = True
+    if na_redact:
+        rate_page.apply_redactions(images=0)
+    for px, y, val in filled_rates:
+        put(rate_page, 0, y, val, right=px)
     lang = data.get("lang", "")
     if "繁體" in lang:
         tick(doc[0], *CHECKBOXES["lang_zh"])

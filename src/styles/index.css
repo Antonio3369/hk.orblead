@@ -1232,6 +1232,29 @@ body {
   padding-bottom: 8px;
 }
 
+.admin-increment-rank-panel {
+  min-width: 0;
+}
+
+.admin-increment-rank-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.admin-increment-rank-table th.num {
+  text-align: right;
+}
+
+.admin-increment-flag {
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.admin-increment-zero {
+  color: var(--text-secondary);
+}
+
 .admin-chart-duo,
 .admin-rank-duo {
   display: grid;

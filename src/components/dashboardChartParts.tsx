@@ -6,7 +6,12 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { formatChangePercent, formatHkd, type AdminMerchantInsightBucket } from "@/api/client";
+import {
+  formatChangePercent,
+  formatHkd,
+  type AdminMerchantInsightBucket,
+  type AdminSalesIncrementRanking,
+} from "@/api/client";
 
 export const CHART_TOOLTIP_STYLE = {
   background: "#fff",
@@ -238,6 +243,91 @@ export function HorizontalRankBoard({
           </button>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function SignedIncrementAmount({ value }: { value: number }) {
+  if (value === 0) {
+    return <span className="admin-increment-zero">{formatHkd(0)}</span>;
+  }
+  const up = value > 0;
+  return (
+    <span className={`change-pill ${up ? "up" : "down"}`} title="交易額增量">
+      {up ? "+" : ""}
+      {formatHkd(value)}
+    </span>
+  );
+}
+
+export function SalesIncrementRankTable({
+  ranking,
+  onRowClick,
+}: {
+  ranking: AdminSalesIncrementRanking;
+  onRowClick?: (salesUserId: number) => void;
+}) {
+  return (
+    <section className="panel admin-chart-panel admin-increment-rank-panel">
+      <div className="panel-intro">
+        <h2 className="panel-title">{ranking.titleLabel} 交易額增量排名</h2>
+        <p className="panel-desc panel-desc-tight">
+          按 {ranking.lastMonthLabel} 減 {ranking.twoMonthsAgoLabel} 增量排序 · 完整自然月
+        </p>
+      </div>
+      <div className="table-wrap table-wrap--stack">
+        <table className="data-table data-table-compact admin-increment-rank-table">
+          <thead>
+            <tr>
+              <th>排名</th>
+              <th>銷售</th>
+              <th className="num">{ranking.twoMonthsAgoLabel}</th>
+              <th className="num">{ranking.lastMonthLabel}</th>
+              <th className="num">增量</th>
+              <th className="num">環比</th>
+              <th className="num">有交易商戶</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ranking.sales.map((row) => (
+              <tr key={row.id}>
+                <td data-label="排名">{row.rank}</td>
+                <td data-label="銷售">
+                  {onRowClick ? (
+                    <button type="button" className="link-btn" onClick={() => onRowClick(row.id)}>
+                      {row.displayName}
+                    </button>
+                  ) : (
+                    row.displayName
+                  )}
+                  {row.noTxnTwoMonthsAgo ? (
+                    <span className="admin-increment-flag muted">上上月無交易</span>
+                  ) : null}
+                </td>
+                <td className="num" data-label={ranking.twoMonthsAgoLabel}>
+                  {formatHkd(row.twoMonthsAgoAmount)}
+                </td>
+                <td className="num" data-label={ranking.lastMonthLabel}>
+                  {formatHkd(row.lastMonthAmount)}
+                </td>
+                <td className="num" data-label="增量">
+                  <SignedIncrementAmount value={row.increment} />
+                </td>
+                <td className="num" data-label="環比">
+                  {row.growthRatePercent === null ? (
+                    <span className="muted">—</span>
+                  ) : (
+                    <ChangePill value={row.growthRatePercent} title="環比增幅" />
+                  )}
+                </td>
+                <td className="num" data-label="有交易商戶">
+                  {row.activeMerchantCount} / {row.assignedMerchantCount}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

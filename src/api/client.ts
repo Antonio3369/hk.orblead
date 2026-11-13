@@ -178,6 +178,26 @@ export interface AdminSalesRankRow {
   assignedMerchantCount: number;
 }
 
+export interface AdminSalesIncrementRankRow {
+  rank: number;
+  id: number;
+  displayName: string;
+  twoMonthsAgoAmount: number;
+  lastMonthAmount: number;
+  increment: number;
+  growthRatePercent: number | null;
+  noTxnTwoMonthsAgo: boolean;
+  activeMerchantCount: number;
+  assignedMerchantCount: number;
+}
+
+export interface AdminSalesIncrementRanking {
+  titleLabel: string;
+  twoMonthsAgoLabel: string;
+  lastMonthLabel: string;
+  sales: AdminSalesIncrementRankRow[];
+}
+
 export interface AdminMerchantInsightBucket {
   key: "rising" | "declining" | "newSilent" | "flat";
   label: string;
@@ -236,6 +256,7 @@ export interface AdminDashboardCharts {
     lastMonthLabel: string;
     points: AdminDailyMonthCrossPoint[];
   };
+  salesIncrementRanking?: AdminSalesIncrementRanking;
 }
 
 export interface PersonalDashboardCharts {

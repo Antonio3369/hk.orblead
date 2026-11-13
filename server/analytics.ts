@@ -1,6 +1,6 @@
 import { db } from "./db.js";
 import { getLeaderSalesUserIds, listLeaderTeamSales } from "./leaderTeam.js";
-import { listTigerTeamSales } from "./tigerTeam.js";
+import { getSalesPeriodComparison, listTigerTeamSales } from "./tigerTeam.js";
 import {
   getMerchantInsightStatus,
   parseUnreadAlertPeriods,
@@ -1064,6 +1064,26 @@ export interface AdminSalesRankRow {
   assignedMerchantCount: number;
 }
 
+export interface AdminSalesIncrementRankRow {
+  rank: number;
+  id: number;
+  displayName: string;
+  twoMonthsAgoAmount: number;
+  lastMonthAmount: number;
+  increment: number;
+  growthRatePercent: number | null;
+  noTxnTwoMonthsAgo: boolean;
+  activeMerchantCount: number;
+  assignedMerchantCount: number;
+}
+
+export interface AdminSalesIncrementRanking {
+  titleLabel: string;
+  twoMonthsAgoLabel: string;
+  lastMonthLabel: string;
+  sales: AdminSalesIncrementRankRow[];
+}
+
 export interface AdminMerchantInsightBucket {
   key: "rising" | "declining" | "newSilent" | "flat";
   label: string;
@@ -1113,6 +1133,7 @@ export interface AdminDashboardCharts {
     lastMonthLabel: string;
     points: AdminDailyMonthCrossPoint[];
   };
+  salesIncrementRanking?: AdminSalesIncrementRanking;
 }
 
 export function getAdminMonthCompare(userId: number, role: string): AdminMonthCompare {
@@ -1169,6 +1190,50 @@ export function getAdminSalesRanking(orgLastMonthTotal: number): AdminSalesRankR
       activeMerchantCount: row.activeMerchantCount,
       assignedMerchantCount: row.assignedMerchantCount,
     }));
+}
+
+export function getAdminSalesIncrementRanking(): AdminSalesIncrementRanking {
+  const twoRef = calendarMonthOffset(2);
+  const lastRef = calendarMonthOffset(1);
+  const titleLabel = `${lastRef.month}月 vs ${twoRef.month}月`;
+  const twoMonthsAgoLabel = `${twoRef.month}月`;
+  const lastMonthLabel = `${lastRef.month}月`;
+
+  const rows = listTigerTeamSales().map((row) => {
+    const periods = getSalesPeriodComparison(row.id);
+    const twoMonthsAgoAmount = periods.find((p) => p.key === "twoMonthsAgo")?.totalAmount ?? 0;
+    const lastMonthAmount = row.lastMonthAmount;
+    const increment = Math.round((lastMonthAmount - twoMonthsAgoAmount) * 100) / 100;
+    const growthRatePercent =
+      twoMonthsAgoAmount > 0 ? Math.round((increment / twoMonthsAgoAmount) * 1000) / 10 : null;
+    const noTxnTwoMonthsAgo = twoMonthsAgoAmount === 0 && lastMonthAmount > 0;
+    const lastPeriod = periods.find((p) => p.key === "lastMonth");
+
+    return {
+      id: row.id,
+      displayName: row.displayName,
+      twoMonthsAgoAmount,
+      lastMonthAmount,
+      increment,
+      growthRatePercent,
+      noTxnTwoMonthsAgo,
+      activeMerchantCount: lastPeriod?.activeMerchantCount ?? row.activeMerchantCount,
+      assignedMerchantCount: row.assignedMerchantCount,
+    };
+  });
+
+  const sales = rows
+    .slice()
+    .sort(
+      (a, b) =>
+        b.increment - a.increment ||
+        b.lastMonthAmount - a.lastMonthAmount ||
+        a.displayName.localeCompare(b.displayName, "zh-HK") ||
+        a.id - b.id
+    )
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+
+  return { titleLabel, twoMonthsAgoLabel, lastMonthLabel, sales };
 }
 
 export function getLeaderTeamSalesRanking(
@@ -1350,6 +1415,7 @@ export function getAdminDashboardCharts(userId: number, role: string): AdminDash
     merchantInsight: merchantInsightFromList(merchants),
     merchantBoxOffice,
     dailyMonthCross: getAdminDailyMonthCross(userId, role),
+    salesIncrementRanking: getAdminSalesIncrementRanking(),
   };
 }
 

@@ -30,6 +30,7 @@ import {
   HorizontalRankBoard,
   INSIGHT_BUCKET_ORDER,
   InsightMiniDonut,
+  SalesIncrementRankTable,
   type RankRow,
 } from "@/components/dashboardChartParts";
 
@@ -322,6 +323,13 @@ export function AdminDashboardPanel({
           </div>
         </div>
       </section>
+
+      {charts.salesIncrementRanking ? (
+        <SalesIncrementRankTable
+          ranking={charts.salesIncrementRanking}
+          onRowClick={onOpenTigerTeamSales}
+        />
+      ) : null}
 
       <div className="admin-rank-duo">
         <HorizontalRankBoard
